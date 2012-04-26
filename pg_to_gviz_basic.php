@@ -2,10 +2,9 @@
 	$debug = false;
 	$debug_arg = getargs ("debug",0);
 	if ($debug_arg) $debug = true;
-// gvcsv - used by google, comma delimited text file
-// gvjson - used by google, json data source for gv objects
-//		unfortunately, we'll need a third dimension, since the field types change based on the gv object type
-//		use $output_gv_type
+// csv - used by google, comma delimited text file
+// json - used by google, json data source for gv objects
+//		unfortunately, we'll need a third dimension, since the field types change based on the gv object type, $output_gv_type
 //		table - the default for now
 //		column_graph
 //		annotated_time_line
@@ -14,58 +13,14 @@
 // html_table_2d -
 $output_format_arg = getargs ("output_format","html_table_2d");
 if ($debug) echo "initial output_format: $output_format_arg<br>";
-switch ($output_type) {
-	case 'gvjson':
-		$output_gv_type = getargs ("output_gv_type","table");
-		if ($debug) echo "output_gv_type: $output_gv_type<br>";
-		break;
-	case 'gvcsv':
-	case 'html_table_2d':
-	case 'html_table_raw':
-	default:
-}
-// $output_type
-// category1pg - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
-//				this one is the simplest - source is crosstab - a category key field, a category label field, and columns for every series
-//				but this one is the less useful, because crosstabs are difficult to create dynamically in postgresql,
-//				so if the number of series varies, then this is not the ideal...
-// category2pg - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
-//				this one is a little more complex - the source is a relational type table:
-//				a category key field, a category label field,
-//				a series key field, a series label field,
-//				and a value column
-//				the code below converts this into a multi-column json table
-//				this one is more useful, because it can create as many series columns as are in the data,
-// more types coming... 
-$output_type = getargs ("output_type","category");
-if ($debug) echo "output_type: $output_type<br>";
-// get the needed args for each type
-switch ($output_type) {
-	case 'category1pg':
-		break;
-	case 'category2pg':
-		break;
-	default:
-}
-// other args
-$category_axis_label = getargs ("category_axis_label","histogram bins");
-$series_axis_label = getargs ("series_axis_label","count");
-$conv_factor = getargs ("conversion_factor",1.0);
-$precision = getargs ("output_precision",99);
-if ($debug) {
-	echo "output_type: $output_type<br>";
-	echo "category_axis_label: $category_axis_label<br>";
-	echo "series_axis_label: $series_axis_label<br>";
-	echo "conversion_factor: $conv_factor<br>";
-	echo "output_precision: $precision<br>";
-}
+// but let google args over-ride it...
 // ----------------------
 // this script operates both as a simple (no querying) gv data source returning either a json data stream or a csv file
 //   and also a stand-alone callable data service returning data in various forms: json, csv file, and html tables
 // as the former it can handle a few tqx args, including specifically the 'out' arg as follows:
 //   if it is 'csv', it returns a csv file containing comma delimited data
 //   if it is 'json', then it returns the appropriate json to feed google visualizations
-// it can not handle the tq arg (query strings)
+// it can not (yet) handle the tq arg (query strings)
 // ----------------------
 // get the gv json tq args, if any
 // ----------------------
@@ -94,7 +49,54 @@ if (strlen($tqx['out'])) {
 	$output_format = strtolower($output_format_arg); // assumes this is set above
 }
 if ($debug) {
-	echo "final output_format: $output_format<br>";
+echo "final output_format: $output_format<br>";
+}
+switch ($output_format) {
+	case 'json':
+		$output_gv_type = getargs ("output_gv_type","table");
+		if ($debug) echo "output_gv_type: $output_gv_type<br>";
+		break;
+	case 'gvcsv':
+	case 'html_table_2d':
+	case 'html_table_raw':
+	default:
+		// nothing to see here. move along, please.
+}
+// $output_type
+// category1pg - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
+//				this one is the simplest - source is a pg crosstab:
+//				a category key field, a category label field, and columns for every series
+//				but this one is the less useful, because crosstabs are difficult to create dynamically in postgresql,
+//				so if the number of series varies, then this is not the ideal...
+// category2pg - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
+//				this one is a little more complex - the source is a pg relational type table:
+//				a category key field, a category label field,
+//				a series key field, a series label field,
+//				and a value column
+//				the code below converts this into a multi-column table - to make it suitable for gv json and etc.
+//				this one is more useful, because it can create as many series columns as are in the data,
+// more types coming... 
+$output_type = getargs ("output_type","category");
+if ($debug) echo "output_type: $output_type<br>";
+// get the needed args for each type
+switch ($output_type) {
+	case 'category1pg':
+		break;
+	case 'category2pg':
+		break;
+	default:
+}
+// other args
+$category_axis_label = getargs ("category_axis_label","histogram bins");
+$series_axis_label = getargs ("series_axis_label","count");
+$conv_factor = getargs ("conversion_factor",1.0);
+$precision = getargs ("output_precision",99);
+if ($debug) {
+	echo "output_type: $output_type<br>";
+	echo "category_axis_label: $category_axis_label<br>";
+	echo "series_axis_label: $series_axis_label<br>";
+	echo "conversion_factor: $conv_factor<br>";
+	echo "output_precision: $precision<br>";
 }
 // first get the readings from the database into arrays
 $db_host = getargs ("db_host","lredb2");
