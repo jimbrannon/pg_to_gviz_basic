@@ -6,9 +6,10 @@ $db_user = "jim_dev"; //"" is the official default
 $db_password = "jimdev";//"" is the official default
 $db_name = "div3welldata";//"" is the official default
 $table_name = "public.selected_histograms"; //"" is the official default
-$debug_arg = "true"; //false is the official default
-$output_format_arg = "html_table_2d"; //"html_table_2d" is the official default
-$output_gv_type = "table"; //"table" is the official default
+$debug_arg = "false"; //false is the official default
+$silent_debug_arg = "true"; //false is the official default
+$output_format_arg = "json"; //"json" is the official default so it always works with gviz
+$output_gv_type = "table"; //"table" is the official default - no restrictions on column order or column types on tables
 $output_type = "category1"; //"" is the official default
 $category_index_field = "bin_index"; //"" is the official default
 $category_index_selections = ""; //"" is the official default
@@ -40,6 +41,27 @@ if (strlen(trim($debug_arg))) {
 	$debug = false;
 }
 if ($debug) echo "debug arg: $debug_arg<br>";
+// get the silent debug arg
+$silent_debug_arg = getargs ("silent_debug",$silent_debug_arg);
+if (strlen(trim($silent_debug_arg))) {
+	switch (strtolower($silent_debug_arg)) {
+		case "false":
+		case "no":
+			$silent_debug = false;
+			break;
+		default:
+			$silent_debug = true;
+	}
+} else {
+	$silent_debug = false;
+}
+if ($silent_debug) {
+	$path = '/tmp/';
+	$file_name_base = "pg_to_gviz_basic_debug_".date('YmdHis');
+	$file_name = $file_name_base.".txt";
+	$txtfile = $path.$file_name;
+	$silent_debug_handle = fopen($txtfile, 'w');
+}
 // csv - used by google, comma delimited text file
 // json - used by google, json data source for gv objects
 //		unfortunately, we'll need a third dimension, since the field types change based on the gv object type, $output_gv_type
@@ -51,6 +73,7 @@ if ($debug) echo "debug arg: $debug_arg<br>";
 // html_table_2d -
 $output_format_arg = getargs ("output_format",$output_format_arg);
 if ($debug) echo "initial output_format: $output_format_arg<br>";
+if ($silent_debug) fwrite($silent_debug_handle,"initial output_format: $output_format_arg<br>");
 // but let google args over-ride it...
 // ----------------------
 // this script operates both as a simple (no querying) gv data source returning either a json data stream or a csv file
@@ -66,6 +89,10 @@ $tq = getargs ("tq","");  // perhaps we should expand this to send an error mesa
 if ($debug) {
 	echo "Google Visualization JSON data source arguments:<br>";
 	echo "&#160;&#160;tq: $tq<br>";
+}
+if ($silent_debug) {
+	fwrite($silent_debug_handle,"Google Visualization JSON data source arguments:<br>");
+	fwrite($silent_debug_handle,"&#160;&#160;tq: $tq<br>");
 }
 // ----------------------
 // get the gv json tqx args, if any
@@ -87,12 +114,17 @@ if (strlen($tqx['out'])) {
 	$output_format = strtolower($output_format_arg); // assumes this is set above
 }
 if ($debug)echo "final output_format: $output_format<br>";
+if ($silent_debug)fwrite($silent_debug_handle,"final output_format: $output_format<br>");
 switch ($output_format) {
 	case 'json':
 		$output_gv_type = getargs ("output_gv_type",$output_gv_type);
 		if ($debug) echo "output_gv_type: $output_gv_type<br>";
+		// assume this is for google viz and therefore make sure the args for the header are set...
+		if (!isset($tqx['responseHandler']) || !strlen($tqx['responseHandler'])) $tqx['responseHandler']='google.visualization.Query.setResponse';
+		if (!isset($tqx['version']) || !strlen($tqx['version'])) $tqx['version']='0.6';
+		if (!isset($tqx['reqId'])) $tqx['reqId']=0;
 		break;
-	case 'gvcsv':
+	case 'csv':
 	case 'html_table_2d':
 	case 'html_table_raw':
 	default:
@@ -327,19 +359,19 @@ switch ($output_type) {
 		// note that we use the gviz json array format regardless of the output type
 		//   this makes it easier for creating the gviz json, and the others are easy anyway, so...
 		// use the field names for the labels
-		$gviz_json = array();
-		$gviz_json["cols"][0]["id"] = "category";
-		$gviz_json["cols"][0]["label"] = $cat_lbl;
-		$gviz_json["cols"][0]["type"] = "string";
+		$datatable = array();
+		$datatable["cols"][0]["id"] = "category";
+		$datatable["cols"][0]["label"] = $cat_lbl;
+		$datatable["cols"][0]["type"] = "string";
 		$series_fields_array = array();
 		$series_fields_array = explode(",",$series_fields);
 		if ($debug) echo "exploded series:<br>";
 		if ($debug) html_show_array($series_fields_array);
 		$series_counter = 0;
 		foreach ($series_fields_array as $series) {
-			$gviz_json["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
-			$gviz_json["cols"][$series_counter+1]["label"] = $series;
-			$gviz_json["cols"][$series_counter+1]["type"] = "number";
+			$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
+			$datatable["cols"][$series_counter+1]["label"] = $series;
+			$datatable["cols"][$series_counter+1]["type"] = "number";
 			++$series_counter;
 		}
 		$column_count = $series_counter;
@@ -347,10 +379,10 @@ switch ($output_type) {
 		// load the gviz json array with data
 		$row_count = 0;
 		while ($row = pg_fetch_object($pg_results)) {
-			$gviz_json["rows"][$row_count]["c"][0]["v"] = $row->$cat_fld;
+			$datatable["rows"][$row_count]["c"][0]["v"] = $row->$cat_fld;
 			$series_counter = 0;
 			foreach ($series_fields_array as $series) {
-				$gviz_json["rows"][$row_count]["c"][$series_counter+1]["v"] = $row->$series * $conv_factor;
+				$datatable["rows"][$row_count]["c"][$series_counter+1]["v"] = $row->$series * $conv_factor;
 				++$series_counter;
 			}
 			++$row_count;
@@ -377,13 +409,13 @@ switch ($output_format) {
 		} else {
 			$row = array();
 			for ($c=0;$c<=$column_count;$c++) {
-				$row[] = $gviz_json["cols"][$c]["label"];
+				$row[] = $datatable["cols"][$c]["label"];
 			}
 			fputcsv($handle,$row);
 			for ($r=0;$r<$row_count;$r++) {
 				$row = array();
 				for ($c=0;$c<=$column_count;$c++) {
-					$row[] = $gviz_json["rows"][$r]["c"][$c]["v"];
+					$row[] = $datatable["rows"][$r]["c"][$c]["v"];
 				}
 				fputcsv($handle,$row);
 			}
@@ -411,7 +443,7 @@ switch ($output_format) {
 		break;
 	case 'json': //return a json data stream tailored for a gviz object
 		//   first the json data table
-		$json_data_table = json_encode($gviz_json);
+		$json_data_table = json_encode($datatable);
 		//   some stuff that seemed necessary to make the json readaable by the gviz libraries
 		$json_data_table = preg_replace('/\"new/','new',$json_data_table);
 		$json_data_table = preg_replace('/\)\"/',')',$json_data_table);
@@ -425,13 +457,17 @@ switch ($output_format) {
 		// and echo the results
 		echo $tqx['responseHandler']."({version:'".$tqx['version']."',reqId:'".$tqx['reqId']."',status:'ok',table:$json_data_table});";
 		//echo $tqx['responseHandler']."({\"version\":\"".$tqx['version']."\",\"reqId\":\"".$tqx['reqId']."\",\"status\":\"ok\",\"table\":$json_data_table});";
+		//write this to a temp file for debugging
+		if ($silent_debug) {
+			fwrite($silent_debug_handle,$tqx['responseHandler']."({version:'".$tqx['version']."',reqId:'".$tqx['reqId']."',status:'ok',table:$json_data_table});");
+		}
 		break;
 	case 'html_table_2d': // output a simple html table, rows and columns, i.e. 2 dimensional
 		echo "<table cellspacing=\"0\" border=\"2\">\n";
 		echo "<tr>";
 		for ($c=0;$c<=$column_count;$c++) {
 			echo "<td>";
-			echo $gviz_json["cols"][$c]["label"];
+			echo $datatable["cols"][$c]["label"];
 			echo "</td>";
 		}
 		echo "</tr>\n";
@@ -439,7 +475,7 @@ switch ($output_format) {
 			echo "<tr>";
 			for ($c=0;$c<=$column_count;$c++) {
 				echo "<td>";
-				echo $gviz_json["rows"][$r]["c"][$c]["v"];
+				echo $datatable["rows"][$r]["c"][$c]["v"];
 				echo "</td>";
 			}
 			echo "</tr>\n";
@@ -448,7 +484,10 @@ switch ($output_format) {
 		break;
 	case 'html_table_raw': // dump the data array into a html table supporting more than 2 dimensions
 	default:
-		html_show_array($gviz_json);
+		html_show_array($datatable);
+}
+if ($silent_debug) {
+	fclose($silent_debug_handle);
 }
 /*
  * other functions I need
