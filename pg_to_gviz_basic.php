@@ -10,8 +10,8 @@ $silent_debug_arg = "false"; //false is the official default
 $output_format_arg = "json"; //"json" is the official default so it always works with gviz
 $output_gv_type = "table"; //"table" is the official default - no restrictions on column order or column types on tables
 $output_type = "category1"; //"" is the official default
-$data_table_name = "public.selected_histograms"; //"" is the official default
-$category_table_name = "public.selected_histograms"; //"" is the official default
+$data_table_name = "public.meter_test_error_tester_number_histogram"; //"" is the official default
+$category_table_name = "public.selected_histogram_bins"; //"" is the official default
 $category_index_field = "bin_index"; //"" is the official default
 $category_index_selections = ""; //"" is the official default
 $category_label_field = "bin_label"; //"" is the official default
@@ -177,7 +177,7 @@ switch ($output_type) {
 			echo "filter_index_field: $filter_index_field<br>";
 			echo "filter_index_selections: $filter_index_selections<br>";
 		}
-		if (!strlen(trim($table_name))) {
+		if (!strlen(trim($data_table_name))) {
 			echo "Error: Missing table_name arg.  table_name is required for a category1 output.<br>";
 			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 			exit;
@@ -238,37 +238,6 @@ switch ($output_type) {
 		}
 		break;
 	default:
-		$table_name = getargs ("table_name",$table_name);
-		$category_index_field = getargs ("category_index_field",$category_index_field);
-		$category_index_selections = getargs ("category_index_selections",$category_index_selections);
-		$category_label_field = getargs ("category_label_field",$category_label_field);
-		$series_fields = getargs ("series_fields",$series_fields);
-		$filter_index_field = getargs ("filter_index_field",$filter_index_field);
-		$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
-		if ($debug) {
-			echo "table_name*: $table_name<br>";
-			echo "category_index_field*: $category_index_field<br>";
-			echo "category_index_selections: $category_index_selections<br>";
-			echo "category_label_field: $category_label_field<br>";
-			echo "series_fields*: $series_fields<br>";
-			echo "filter_index_field: $filter_index_field<br>";
-			echo "filter_index_selections: $filter_index_selections<br>";
-		}
-		if (!strlen(trim($table_name))) {
-			echo "Error: Missing table_name arg.  table_name is required for a category1 output.<br>";
-			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
-			exit;
-		}
-		if (!strlen(trim($category_index_field))) {
-			echo "Error: Missing category_index_field arg.  category_index_field is required for a category1 output.<br>";
-			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
-			exit;
-		}
-		if (!strlen(trim($series_fields))) {
-			echo "Error: Missing series_fields arg.  series_fields is required for a category1 output.<br>";
-			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
-			exit;
-		}
 }
 // other args
 $drupal_user_id_field = getargs ("drupal_user_id_field",$drupal_user_id_field);
@@ -380,7 +349,7 @@ switch ($output_type) {
 			$datatable["cols"][$series_counter+1]["type"] = "number";
 			++$series_counter;
 		}
-		$column_count = $series_counter;
+		$table_column_count = $series_counter;
 		if ($debug) echo "created gviz json array for $column_count series<br>";
 		// load the gviz json array with data
 		//  
@@ -391,9 +360,9 @@ switch ($output_type) {
 		if (strlen(trim($data_table_name)) && $category_show_all) {
 			// the field list string
 			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
-				$category_db_query_fields = "$category_index_field, $category_label_field, ";
+				$category_db_query_fields = "$category_index_field, $category_label_field ";
 			} else {
-				$category_db_query_fields = "$category_index_field, ";
+				$category_db_query_fields = "$category_index_field ";
 			}
 			// the basic query
 			$category_db_query = "SELECT $category_db_query_fields FROM $category_table_name";
@@ -430,6 +399,7 @@ switch ($output_type) {
 				}
 				++$data_row_count;
 			}
+			$table_row_count = $category_row_count;
 			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
 		} else {
 			$data_row_count = 0;
@@ -442,6 +412,7 @@ switch ($output_type) {
 				}
 				++$data_row_count;
 			}
+			$table_row_count = $data_row_count;
 			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
 		}
 		break;
@@ -464,13 +435,13 @@ switch ($output_format) {
 			echo "<br>";
 		} else {
 			$row = array();
-			for ($c=0;$c<=$column_count;$c++) {
+			for ($c=0;$c<=$table_column_count;$c++) {
 				$row[] = $datatable["cols"][$c]["label"];
 			}
 			fputcsv($handle,$row);
-			for ($r=0;$r<$row_count;$r++) {
+			for ($r=0;$r<$table_row_count;$r++) {
 				$row = array();
-				for ($c=0;$c<=$column_count;$c++) {
+				for ($c=0;$c<=$table_column_count;$c++) {
 					$row[] = $datatable["rows"][$r]["c"][$c]["v"];
 				}
 				fputcsv($handle,$row);
@@ -521,15 +492,15 @@ switch ($output_format) {
 	case 'html_table_2d': // output a simple html table, rows and columns, i.e. 2 dimensional
 		echo "<table cellspacing=\"0\" border=\"2\">\n";
 		echo "<tr>";
-		for ($c=0;$c<=$column_count;$c++) {
+		for ($c=0;$c<=$table_column_count;$c++) {
 			echo "<td>";
 			echo $datatable["cols"][$c]["label"];
 			echo "</td>";
 		}
 		echo "</tr>\n";
-		for ($r=0;$r<$row_count;$r++) {
+		for ($r=0;$r<$table_row_count;$r++) {
 			echo "<tr>";
-			for ($c=0;$c<=$column_count;$c++) {
+			for ($c=0;$c<=$table_column_count;$c++) {
 				echo "<td>";
 				echo $datatable["rows"][$r]["c"][$c]["v"];
 				echo "</td>";
