@@ -6,6 +6,7 @@ $db_user = "jim_dev"; //"" is the official default
 $db_password = "jimdev";//"" is the official default
 $db_name = "div3welldata";//"" is the official default
 $table_name = "public.selected_histograms"; //"" is the official default
+//$table_name = "public.selected_histograms2"; //"" is the official default
 $debug_arg = "false"; //false is the official default
 $silent_debug_arg = "false"; //false is the official default
 $output_format_arg = "json"; //"json" is the official default so it always works with gviz
@@ -15,9 +16,10 @@ $category_index_field = "bin_index"; //"" is the official default
 $category_index_selections = ""; //"" is the official default
 $category_label_field = "bin_label"; //"" is the official default
 $series_fields = "count"; //"" is the official default
-$series_index_field = ""; //"" is the official default
+$series_index_field = "test_year"; //"" is the official default
 $series_index_selections = ""; //"" is the official default
 $series_label_field = ""; //"" is the official default
+$series_value_field = "count"; //"" is the official default
 $filter_index_field = ""; //"" is the official default
 $filter_index_selections = ""; //"" is the official default
 $drupal_user_id_field = "drupal_userid"; //"" is the official default
@@ -202,31 +204,38 @@ switch ($output_type) {
 		$series_index_field = getargs ("series_index_field",$series_index_field);
 		$series_index_selections = getargs ("series_index_selections",$series_index_selections);
 		$series_label_field = getargs ("series_label_field",$series_label_field);
+		$series_value_field = getargs ("series_value_field",$series_value_field);
 		$filter_index_field = getargs ("filter_index_field",$filter_index_field);
 		$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
 		if ($debug) {
 			echo "table_name*: $table_name<br>";
 			echo "category_index_field*: $category_index_field<br>";
-			echo "category_index_selections*: $category_index_selections<br>";
+			echo "category_index_selections: $category_index_selections<br>";
 			echo "category_label_field: $category_label_field<br>";
 			echo "series_index_field*: $series_index_field<br>";
-			echo "series_index_selections*: $series_index_selections<br>";
+			echo "series_index_selections: $series_index_selections<br>";
 			echo "series_label_field: $series_label_field<br>";
+			echo "series_value_field*: $series_value_field<br>";
 			echo "filter_index_field: $filter_index_field<br>";
 			echo "filter_index_selections: $filter_index_selections<br>";
 		}
 		if (!strlen(trim($table_name))) {
-			echo "Error: Missing table_name arg.  table_name is required for a category1 output.<br>";
+			echo "Error: Missing table_name arg.  table_name is required for a category2 output.<br>";
 			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 			exit;
 		}
-		if (!strlen(trim($category_index_field)) && strlen(trim($series_index_selections))) {
-			echo "Error: Missing category arg.  Either category_index_field or category_label_field is required for a category1 output.<br>";
+		if (!strlen(trim($category_index_field))) {
+			echo "Error: Missing category_index_field arg.  category_index_field is required for a category2 output.<br>";
 			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 			exit;
 		}
-		if (!strlen(trim($series_index_field)) && strlen(trim($series_index_selections))) {
-			echo "Error: Missing category arg.  Either category_index_field or category_label_field is required for a category1 output.<br>";
+		if (!strlen(trim($series_index_field))) {
+			echo "Error: Missing series_index_field arg.  series_index_field is required for a category2 output.<br>";
+			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
+			exit;
+		}
+		if (!strlen(trim($series_value_field))) {
+			echo "Error: Missing series_value_field arg.  series_value_field is required for a category2 output.<br>";
 			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 			exit;
 		}
@@ -390,6 +399,106 @@ switch ($output_type) {
 		if ($debug) echo "loaded gviz json array with $row_count records of data<br>";
 		break;
 	case 'category2':
+		// first construct the query appropriate to the supplied args
+		// the field list string
+		if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user! 
+			$cat_fld = $category_label_field;
+			$cat_lbl = $category_label_field;
+		} else {
+			$cat_fld = $category_index_field;
+			$cat_lbl = $category_index_field;
+		}
+		$db_query_fields = "$cat_fld, ";
+		// now tack on the the series fields
+		// if the delimiter in the url ever changes from not being a comma, then we'll have to explode and parse the series fields
+		$db_query_fields .= $series_fields;
+		// the basic query
+		$db_query = "SELECT $db_query_fields FROM $table_name";
+		$where = 0;
+		// now the optional WHERE clause(s) if necessary
+		if (strlen(trim($category_index_selections))) { // we have a list of category indices to handle
+			$db_query .= " WHERE (";
+			$where = 1;
+			$index_counter = 0;
+			$category_indices = array();
+			$category_indices = explode(",",$category_index_selections);
+			foreach ($category_indices as $category_index) {
+				if ($index_counter) {
+					$db_query .= " OR";
+				}
+				$db_query .= " $category_index_field = $category_index";
+				++$index_counter;
+			}
+			$db_query .= " )";
+		}
+		if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
+			if ($where) {
+				$db_query .= " AND (";
+			} else {
+				$db_query .= " WHERE (";
+				$where = 1;
+			}
+			$index_counter = 0;
+			$filter_indices = array();
+			$filter_indices = explode(",",$filter_index_selections);
+			foreach ($filter_indices as $filter_index) {
+				if ($index_counter) {
+					$db_query .= " OR";
+				}
+				$db_query .= " $filter_index_field = $filter_index";
+				++$index_counter;
+			}
+			$db_query .= " )";
+		}
+		if (strlen(trim($drupal_user_id_field)) && strlen(trim($drupal_user_id))) { // we have a drupal_user id to handle
+			if ($where) {
+				$db_query .= " AND (";
+			} else {
+				$db_query .= " WHERE (";
+				$where = 1;
+			}
+			$db_query .= " $drupal_user_id_field = $drupal_user_id )";
+		}
+		// finally the ORDER BY clause.  the categories will be ordered here by index.  the series are ordered as named in the list in the arg
+		$db_query .= " ORDER BY $category_index_field";
+		if ($debug) echo "db_query: $db_query<br>";
+		// now try the query!
+		$pg_results = pg_query($dbhandle, $db_query);
+		$num_records = pg_num_rows($pg_results);
+		if ($debug) echo "query resulted in $num_records records.<br>";
+		// create the gviz json array header records
+		// note that we use the gviz json array format regardless of the output type
+		//   this makes it easier for creating the gviz json, and the others are easy anyway, so...
+		// use the field names for the labels
+		$datatable = array();
+		$datatable["cols"][0]["id"] = "category";
+		$datatable["cols"][0]["label"] = $cat_lbl;
+		$datatable["cols"][0]["type"] = "string";
+		$series_fields_array = array();
+		$series_fields_array = explode(",",$series_fields);
+		if ($debug) echo "exploded series:<br>";
+		if ($debug) html_show_array($series_fields_array);
+		$series_counter = 0;
+		foreach ($series_fields_array as $series) {
+			$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
+			$datatable["cols"][$series_counter+1]["label"] = $series;
+			$datatable["cols"][$series_counter+1]["type"] = "number";
+			++$series_counter;
+		}
+		$column_count = $series_counter;
+		if ($debug) echo "created gviz json array for $column_count series<br>";
+		// load the gviz json array with data
+		$row_count = 0;
+		while ($row = pg_fetch_object($pg_results)) {
+			$datatable["rows"][$row_count]["c"][0]["v"] = $row->$cat_fld;
+			$series_counter = 0;
+			foreach ($series_fields_array as $series) {
+				$datatable["rows"][$row_count]["c"][$series_counter+1]["v"] = $row->$series * $conv_factor;
+				++$series_counter;
+			}
+			++$row_count;
+		}
+		if ($debug) echo "loaded gviz json array with $row_count records of data<br>";
 		break;
 	default:
 }
