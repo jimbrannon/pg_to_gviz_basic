@@ -1,6 +1,7 @@
 <?php
 // put some default values up here so ya don't have to dig for them; 
-$db_host = "lredb2"; //"" is the official default
+//$db_host = "lredb2"; //"" is the official default
+$db_host = "www.lre-projects.net"; //"" is the official default
 $db_port = 5431; //"" is the official default
 $db_user = "jim_dev"; //"" is the official default
 $db_password = "jimdev";//"" is the official default
