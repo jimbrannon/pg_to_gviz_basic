@@ -367,7 +367,7 @@ switch ($output_type) {
 		// assumes the category index and category label fields are the same in both the data and category tables
 		// if a category table was given and if the show all flag is set to true,
 		// then create a table with all the combinations, regardless of whether there is data
-		if (strlen(trim($data_table_name)) && $category_show_all) {
+		if (strlen(trim($category_table_name)) && $category_show_all) {
 			// the field list string
 			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
 				$category_db_query_fields = "$category_index_field, $category_label_field ";
@@ -532,14 +532,14 @@ switch ($output_type) {
 		// create an order hash for the series indices
 		$series_counter = 0;
 		while ($series_row = pg_fetch_object($series_pg_results)) {
-			$series_hash[$series_row->$series_index_field] = ($series_counter+1);
+			$series_hash[$series_row->$series_index_field] = $series_counter;
 			$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
 			$datatable["cols"][$series_counter+1]["label"] = $series_row->$ser_lbl;
 			$datatable["cols"][$series_counter+1]["type"] = "number";
 			++$series_counter;
 		}
 		$table_column_count = $series_counter;
-		if ($debug) echo "created gviz json array for $table_column_count series<br>";
+		if ($debug) echo "created gviz json array structure for $table_column_count series<br>";
 		// *** I AM HERE *** JHB
 		// load the gviz json array with data
 		//  
@@ -547,7 +547,7 @@ switch ($output_type) {
 		// assumes the category index and category label fields are the same in both the data and category tables
 		// if a category table was given and if the show all flag is set to true,
 		// then create a table with all the combinations, regardless of whether there is data
-		if (strlen(trim($data_table_name)) && $category_show_all) {
+		if (strlen(trim($category_table_name)) && $category_show_all) {
 			// the field list string
 			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
 				$category_db_query_fields = "$category_index_field, $category_label_field ";
@@ -569,24 +569,18 @@ switch ($output_type) {
 			while ($category_row = pg_fetch_object($category_pg_results)) {
 				$datatable["rows"][$category_row_count]["c"][0]["v"] = $category_row->$cat_lbl;
 				$category_hash[$category_row->$category_index_field] = $category_row_count;
-				$category_series_counter = 0;
-				foreach ($series_fields_array as $series) {
+				for ($category_series_counter=0;$category_series_counter<$table_column_count;++$category_series_counter) {
 					$datatable["rows"][$category_row_count]["c"][$category_series_counter+1]["v"] = $default_value;
-					++$category_series_counter;
 				}
 				++$category_row_count;
 			}
 			if ($debug) echo "created empty json array with $category_row_count records<br>";
-			// now put the data into the data table, using my hash table
+			// now put the data into the data table, using my hash tables
 			$data_row_count = 0;
 			while ($data_row = pg_fetch_object($data_pg_results)) {
-				//$datatable["rows"][$data_row_count]["c"][0]["v"] = $data_row->$cat_lbl;
-				$data_series_counter = 0;
-				foreach ($series_fields_array as $series) {
-					$table_row = $category_hash[$data_row->$category_index_field];
-					$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
-					++$data_series_counter;
-				}
+				$table_row = $category_hash[$data_row->$category_index_field];
+				$table_column = $series_hash[$data_row->$series_index_field];
+				$datatable["rows"][$table_row]["c"][$table_column+1]["v"] = $data_row->$series_value_field * $conv_factor;
 				++$data_row_count;
 			}
 			$table_row_count = $category_row_count;
@@ -595,11 +589,8 @@ switch ($output_type) {
 			$data_row_count = 0;
 			while ($data_row = pg_fetch_object($data_pg_results)) {
 				$datatable["rows"][$data_row_count]["c"][0]["v"] = $data_row->$cat_lbl;
-				$data_series_counter = 0;
-				foreach ($series_fields_array as $series) {
-					$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
-					++$data_series_counter;
-				}
+				$table_column = $series_hash[$data_row->$series_index_field];
+				$datatable["rows"][$data_row_count]["c"][$table_column+1]["v"] = $data_row->$series_value_field * $conv_factor;
 				++$data_row_count;
 			}
 			$table_row_count = $data_row_count;
@@ -607,158 +598,6 @@ switch ($output_type) {
 		}
 		break;
 	default:
-		// first construct the query appropriate to the supplied args
-		// the field list string
-		if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
-			$data_db_query_fields = "$category_index_field, $category_label_field, ";
-			$cat_lbl = $category_label_field;
-		} else {
-			$data_db_query_fields = "$category_index_field, ";
-			$cat_lbl = $category_index_field;
-		}
-		// now tack on the the series fields
-		// if the delimiter in the url ever changes from not being a comma, then we'll have to explode and parse the series fields
-		$data_db_query_fields .= $series_fields;
-		// the basic query
-		$data_db_query = "SELECT $data_db_query_fields FROM $data_table_name";
-		$where = 0;
-		// now the optional WHERE clause(s) if necessary
-		if (strlen(trim($category_index_selections))) { // we have a list of category indices to handle
-			$data_db_query .= " WHERE (";
-			$where = 1;
-			$index_counter = 0;
-			$category_indices = array();
-			$category_indices = explode(",",$category_index_selections);
-			foreach ($category_indices as $category_index) {
-				if ($index_counter) {
-					$data_db_query .= " OR";
-				}
-				$data_db_query .= " $category_index_field = $category_index";
-				++$index_counter;
-			}
-			$data_db_query .= " )";
-		}
-		if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
-			if ($where) {
-				$data_db_query .= " AND (";
-			} else {
-				$data_db_query .= " WHERE (";
-				$where = 1;
-			}
-			$index_counter = 0;
-			$filter_indices = array();
-			$filter_indices = explode(",",$filter_index_selections);
-			foreach ($filter_indices as $filter_index) {
-				if ($index_counter) {
-					$data_db_query .= " OR";
-				}
-				$data_db_query .= " $filter_index_field = $filter_index";
-				++$index_counter;
-			}
-			$data_db_query .= " )";
-		}
-		if (strlen(trim($drupal_user_id_field)) && strlen(trim($drupal_user_id))) { // we have a drupal_user id to handle
-			if ($where) {
-				$data_db_query .= " AND (";
-			} else {
-				$data_db_query .= " WHERE (";
-				$where = 1;
-			}
-			$data_db_query .= " $drupal_user_id_field = $drupal_user_id )";
-		}
-		// finally the ORDER BY clause.  the categories will be ordered here by index.  the series are ordered as named in the list in the arg
-		$data_db_query .= " ORDER BY $category_index_field";
-		if ($debug) echo "db_query: $data_db_query<br>";
-		// now try the query!
-		$data_pg_results = pg_query($dbhandle, $data_db_query);
-		$data_num_records = pg_num_rows($data_pg_results);
-		if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
-		// create the gviz json array header records
-		// note that we use the gviz json array format regardless of the output type
-		//   this makes it easier for creating the gviz json, and the others are easy anyway
-		//
-		// use the field names for the labels
-		$datatable = array();
-		$datatable["cols"][0]["id"] = "category";
-		$datatable["cols"][0]["label"] = $cat_lbl;
-		$datatable["cols"][0]["type"] = "string";
-		$series_fields_array = array();
-		$series_fields_array = explode(",",$series_fields);
-		if ($debug) echo "exploded series:<br>";
-		if ($debug) html_show_array($series_fields_array);
-		$series_counter = 0;
-		foreach ($series_fields_array as $series) {
-			$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
-			$datatable["cols"][$series_counter+1]["label"] = $series;
-			$datatable["cols"][$series_counter+1]["type"] = "number";
-			++$series_counter;
-		}
-		$table_column_count = $series_counter;
-		if ($debug) echo "created gviz json array for $column_count series<br>";
-		// load the gviz json array with data
-		//  
-		// figure out whether to use the data "as is" or create records for "every" category
-		// assumes the category index and category label fields are the same in both the data and category tables
-		// if a category table was given and if the show all flag is set to true,
-		// then create a table with all the combinations, regardless of whether there is data
-		if (strlen(trim($data_table_name)) && $category_show_all) {
-			// the field list string
-			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
-				$category_db_query_fields = "$category_index_field, $category_label_field ";
-			} else {
-				$category_db_query_fields = "$category_index_field ";
-			}
-			// the basic query
-			$category_db_query = "SELECT $category_db_query_fields FROM $category_table_name";
-			if ($debug) echo "category_db_query: $category_db_query<br>";
-			// now try the query!
-			$category_pg_results = pg_query($dbhandle, $category_db_query);
-			$category_num_records = pg_num_rows($category_pg_results);
-			if ($debug) echo "category_db_query resulted in $category_num_records records.<br>";
-			// create the empty data array and 
-			// additionally create a hash table so I EFFICIENTLY know where to put the data later
-			$default_value = null;
-			$category_hash = array();
-			$category_row_count = 0;
-			while ($category_row = pg_fetch_object($category_pg_results)) {
-				$datatable["rows"][$category_row_count]["c"][0]["v"] = $category_row->$cat_lbl;
-				$category_hash[$category_row->$category_index_field] = $category_row_count;
-				$category_series_counter = 0;
-				foreach ($series_fields_array as $series) {
-					$datatable["rows"][$category_row_count]["c"][$category_series_counter+1]["v"] = $default_value;
-					++$category_series_counter;
-				}
-				++$category_row_count;
-			}
-			if ($debug) echo "created empty json array with $category_row_count records<br>";
-			// now put the data into the data table, using my hash table
-			$data_row_count = 0;
-			while ($data_row = pg_fetch_object($data_pg_results)) {
-				//$datatable["rows"][$data_row_count]["c"][0]["v"] = $data_row->$cat_lbl;
-				$data_series_counter = 0;
-				foreach ($series_fields_array as $series) {
-					$table_row = $category_hash[$data_row->$category_index_field];
-					$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
-					++$data_series_counter;
-				}
-				++$data_row_count;
-			}
-			$table_row_count = $category_row_count;
-			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
-		} else {
-			$data_row_count = 0;
-			while ($data_row = pg_fetch_object($data_pg_results)) {
-				$datatable["rows"][$data_row_count]["c"][0]["v"] = $data_row->$cat_lbl;
-				$data_series_counter = 0;
-				foreach ($series_fields_array as $series) {
-					$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
-					++$data_series_counter;
-				}
-				++$data_row_count;
-			}
-			$table_row_count = $data_row_count;
-			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
-		}
 }
 switch ($output_format) {
 	case 'csv': // output them to a csv file - this is required as part of gviz data source
