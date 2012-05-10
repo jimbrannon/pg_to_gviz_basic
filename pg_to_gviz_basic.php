@@ -1,5 +1,6 @@
 <?php
 // put some default values up here so ya don't have to dig for them; 
+$max_num_fields = 20;
 //$db_host = "lredb2"; //"" is the official default
 $db_host = "www.lre-projects.net"; //"" is the official default
 $db_port = 5431; //"" is the official default
@@ -105,6 +106,7 @@ if (strlen($tqx['out'])) {
 }
 if ($debug)echo "final output_format: $output_format<br>";
 if ($silent_debug)fwrite($silent_debug_handle,"final output_format: $output_format<br>");
+
 switch ($output_format) {
 	case 'json':
 		$output_gv_type = getargs ("output_gv_type",$output_gv_type);
@@ -120,20 +122,41 @@ switch ($output_format) {
 	default:
 		// nothing to see here. move along, please.
 }
-// $output_type
-// category1 - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
-//				this one is the simplest - source is a pg crosstab:
-//				a category key field, a category label field, and columns for every series
-//				but this one is the less useful, because crosstabs are difficult to create dynamically in postgresql,
-//				so if the number of series varies, then this is not the ideal...
-// category2 - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
-//				this one is a little more complex - the source is a pg relational type table:
-//				a category key field, a category label field,
-//				a series key field, a series label field,
-//				and a value column
-//				the code below converts this into a multi-column table - to make it suitable for gv json and etc.
-//				this one is more useful, because it can create as many series columns as are in the data,
-// more types coming... 
+/*
+ * $output_type
+ * category1 - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
+ * 				this one is the simplest - source is a pg crosstab:
+ * 				a category key field, a category label field, and columns for every series
+ * 				but this one is the less useful, because crosstabs are difficult to create dynamically in postgresql,
+ * 				so if the number of series varies, then this is not the ideal...
+ * category2 - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
+ * 				this one is a little more complex - the source is a pg relational type table:
+ * 				a category key field, a category label field,
+ * 				a series key field, a series label field,
+ * 				and a value column
+ * 				the code below converts this into a multi-column table - to make it suitable for gv json and etc.
+ * 				this one is more useful, because it can create as many series columns as are in the data,
+ * generic - this is actually a special case of any string passed into this arg that is not predefined
+ * 				this type recreates an output table JUST LIKE the input table, so it is really a lot like category 1
+ * 				more like a crosstab source than the relational source
+ * 				the idea is that the string defines the gviz column types as follows (this is from an email I sent out)
+ * 
+ *					When it's just a table and not some specific data structure that is required for a particular google viz,
+ *					then you can create an "output_type" that is a sequence of characters that tell the MGK what type to declare
+ *					the json columns.  So for example, "SNNS" would tell it to make the columns text, number, number, text.
+ *					The default will be text when not specified.
+ *					S (0) - text
+ *					N (1) - number
+ *					B (2) - boolean (use this with care until we work out the bugs, boolean never stays boolean through transitions)
+ *					D (3) - date
+ *					T (4) - timeofday
+ *					A (5) - datetime
+ *					Note that these are GOOGLE VIZ data types, NOT postgres data types NOR PHP data types!
+ *					The fact that our data has to pass from strongly typed pg fields, through the PHP-PG API into a
+ *					PHP query result data object and then into PHP arrays, and then into a variety of output types
+ *					(HTML text streams, CSV files, JSON text streams, etc.) is why this is a bit of a maze with lots of trap-doors.
+ * 
+ */ 
 $output_type = getargs ("output_type",$output_type);
 if ($debug) echo "output_type: $output_type<br>";
 // common args for all types
@@ -248,7 +271,58 @@ switch ($output_type) {
 			exit;
 		}
 		break;
+	case 'generic':
+		// make them all text and then slither on...
+		$output_type = str_repeat('s',$max_num_fields);
 	default:
+		$data_table_name = getargs ("data_table_name",$data_table_name);
+		$series_fields = getargs ("series_fields",$series_fields);
+		$filter_index_field = getargs ("filter_index_field",$filter_index_field);
+		$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
+		if ($debug) {
+			echo "data_table_name*: $data_table_name<br>";
+			echo "series_fields*: $series_fields<br>";
+			echo "filter_index_field: $filter_index_field<br>";
+			echo "filter_index_selections: $filter_index_selections<br>";
+		}
+		if (!strlen(trim($data_table_name))) {
+			echo "Error: Missing table_name arg.  table_name is required for a category1 output.<br>";
+			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
+			exit;
+		}
+		if (!strlen(trim($series_fields))) {
+			echo "Error: Missing series_fields arg.  series_fields is required for a category1 output.<br>";
+			echo "See pg_to_gviz_basic.php documentation for more information.<br>";
+			exit;
+		}
+		// build the column type array
+		$field_types = array();
+		for ($i=0;$i<$max_num_fields;++$i) {  
+			$field_types[] = 0;
+		}
+		// blow up any string that exists into a series of acceptable field types and then slither on
+		for ($i=0;$i<strlen(trim($output_type));++$i) {
+			$field_types[] = 0;
+			switch ($output_type[$i]) {
+				case 'n':
+					$field_types[$i] = 1;
+					break; 
+				case 'n':
+					$field_types[$i] = 1;
+					break; 
+				case 'n':
+					$field_types[$i] = 1;
+					break; 
+				case 'n':
+					$field_types[$i] = 1;
+					break; 
+				case 'n':
+					$field_types[$i] = 1;
+					break; 
+				default:
+					//leave $field_types[$i] as 0 - i.e. string
+			}
+		}
 }
 // other args
 $drupal_user_id_field = getargs ("drupal_user_id_field",$drupal_user_id_field);
