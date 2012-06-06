@@ -17,11 +17,13 @@ $category_index_field = ""; //"" is the official default
 $category_index_selections = ""; //"" is the official default
 $category_label_field = ""; //"" is the official default
 $category_show_all_arg = "false"; //"false" is the official default
+$series_table_name = ""; //"" is the official default
 $series_fields = ""; //"" is the official default
 $series_index_field = ""; //"" is the official default
 $series_index_selections = ""; //"" is the official default
 $series_label_field = ""; //"" is the official default
 $series_value_field = ""; //"" is the official default
+$series_show_all_arg = "false"; //"false" is the official default
 $filter_index_field = ""; //"" is the official default
 $filter_index_selections = ""; //"" is the official default
 $drupal_user_id_field = ""; //"" is the official default
@@ -228,9 +230,16 @@ switch ($output_type) {
 		} else {
 			$category_show_all = false;
 		}
+		$series_table_name = getargs ("series_table_name",$series_table_name);
 		$series_index_field = getargs ("series_index_field",$series_index_field);
 		$series_index_selections = getargs ("series_index_selections",$series_index_selections);
 		$series_label_field = getargs ("series_label_field",$series_label_field);
+		$series_show_all_arg = getargs ("series_show_all",$series_show_all_arg);
+		if (strlen(trim($series_show_all_arg))) {
+			$series_show_all = strtobool($series_show_all_arg);
+		} else {
+			$series_show_all = false;
+		}
 		$series_value_field = getargs ("series_value_field",$series_value_field);
 		$filter_index_field = getargs ("filter_index_field",$filter_index_field);
 		$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
@@ -246,6 +255,9 @@ switch ($output_type) {
 			echo "series_index_selections: $series_index_selections<br>";
 			echo "series_label_field: $series_label_field<br>";
 			echo "series_value_field*: $series_value_field<br>";
+			echo "series_table_name: $series_table_name<br>";
+			echo "series_show_all_arg: $series_show_all_arg<br>";
+			echo "series_show_all: $series_show_all<br>";
 			echo "filter_index_field: $filter_index_field<br>";
 			echo "filter_index_selections: $filter_index_selections<br>";
 		}
@@ -676,6 +688,50 @@ switch ($output_type) {
 		$datatable["cols"][0]["id"] = "category";
 		$datatable["cols"][0]["label"] = $cat_lbl;
 		$datatable["cols"][0]["type"] = "string";
+
+		/*
+		 * create an order hash for the series indices
+		*
+		* now we have to figure out whether to use the series in the data or the series in a separate table
+		* we only need the series in the separate table if series show all = true,
+		*   so the table has to be defined AND show_all has to = true
+		*   if both are satisfied then get the series indices from the table, otherwise use the values already acquired from the data
+		*
+		* !!! assumes the series index and series label fields are the same in both the data and series tables !!!
+		*/
+		if (strlen(trim($series_table_name)) && $series_show_all) {
+			// get a new list of series from the series table
+			if (strlen(trim($series_label_field))) { // category label field supplied.  Yea, user!
+				$series_db_query_fields  = "$series_index_field, max($series_label_field) as $series_label_field";
+				$ser_lbl = $series_label_field;
+			} else {
+				$series_db_query_fields  = "$series_index_field";
+				$ser_lbl = $series_index_field;
+			}
+			// the series basic query
+			$series_db_query = "SELECT $series_db_query_fields FROM $series_table_name";
+			// allow the series list to still be used if defined
+			if (strlen(trim($series_index_selections))) {
+				$series_db_query .= " WHERE (";
+				$index_counter = 0;
+				$series_indices = array();
+				$series_indices = explode(",",$series_index_selections);
+				foreach ($series_indices as $series_index) {
+					if ($index_counter) {
+						$series_db_query .= " OR";
+					}
+					$series_db_query .= " $series_index_field = $series_index";
+					++$index_counter;
+				}
+				$series_db_query .= " )";
+			}
+			$series_db_query .= " GROUP BY $series_index_field ORDER BY $series_index_field";
+			if ($debug) echo "replacement series_db_query: $series_db_query<br>";
+			// the replacement series values query
+			$series_pg_results = pg_query($dbhandle, $series_db_query);
+			$series_num_records = pg_num_rows($series_pg_results);
+			if ($debug) echo "replacement series_db_query resulted in $series_num_records records.<br>";
+		}
 		/* 
 		 * create an order hash for the series indices
 		 * and also label the json array columns (series) with the series label (or index) value for each series
