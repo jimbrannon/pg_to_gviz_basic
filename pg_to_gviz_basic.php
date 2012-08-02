@@ -268,6 +268,14 @@ function pg_to_gviz_basic(
 				echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 				exit;
 			}
+			/*
+			 * build the (OUTPUT) column type array with defaults
+			 * the defaults are 0 = string
+			 */
+			$field_types = array();
+			for ($i=0;$i<$max_num_fields;++$i) {
+				$field_types[] = 0; // S (0) - text
+			}
 			break;
 		case 'category2':
 			$data_table_name = getargs ("data_table_name",$data_table_name);
@@ -332,6 +340,14 @@ function pg_to_gviz_basic(
 				echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 				exit;
 			}
+			/*
+			 * build the (OUTPUT) column type array with defaults
+			 * the defaults are 0 = string
+			 */
+			$field_types = array();
+			for ($i=0;$i<$max_num_fields;++$i) {
+				$field_types[] = 0; // S (0) - text
+			}
 			break;
 		case 'generic':
 			// make them all text and then slither on...
@@ -357,12 +373,17 @@ function pg_to_gviz_basic(
 				echo "See pg_to_gviz_basic.php documentation for more information.<br>";
 				exit;
 			}
-			// build the column type array
+			/*
+			 * build the (OUTPUT) column type array with defaults
+			* the defaults are 0 = string
+			*/
 			$field_types = array();
 			for ($i=0;$i<$max_num_fields;++$i) {
 				$field_types[] = 0; // S (0) - text
 			}
-			// blow up any string that exists into a series of acceptable field types
+			/*
+			 * blow up any string that exists into a series of acceptable field types
+			 */
 			for ($i=0;$i<strlen(trim($output_type));++$i) {
 				$field_types[] = 0;
 				switch (strtolower($output_type[$i])) {
