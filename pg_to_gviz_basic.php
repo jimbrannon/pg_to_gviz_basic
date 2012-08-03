@@ -972,7 +972,8 @@ function pg_to_gviz_basic(
 						break;
 					case 0: // O (0) - mapping from pg field type to gv column type
 					default:
-						$datatable["cols"][$series_counter]["type"] = ;
+						$pg_field_type = pg_field_type($data_pg_results,$series_counter)
+						$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
 				}
 				++$series_counter;
 			}
