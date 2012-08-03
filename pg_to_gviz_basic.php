@@ -197,12 +197,13 @@ function pg_to_gviz_basic(
 	*					then you can create an "output_type" that is a sequence of characters that tell the MGK what type to declare
 	*					the json columns.  So for example, "SNNS" would tell it to make the columns text, number, number, text.
 	*					The default will be text when not specified.
-	*					S (0) - text
+	*					O (0) - map from original pg field type to gv column type
 	*					N (1) - number
 	*					B (2) - boolean (use this with care until we work out the bugs, boolean never stays boolean through transitions)
 	*					D (3) - date
 	*					T (4) - timeofday
 	*					A (5) - datetime
+	*					S (6) - text
 	*					Note that these are GOOGLE VIZ data types, NOT postgres data types NOR PHP data types!
 	*					The fact that our data has to pass from strongly typed pg fields, through the PHP-PG API into a
 	*					PHP query result data object and then into PHP arrays, and then into a variety of output types
@@ -270,11 +271,11 @@ function pg_to_gviz_basic(
 			}
 			/*
 			 * build the (OUTPUT) column type array with defaults
-			 * the defaults are 0 = string
+			 * the defaults are O (0) = map from original pg field type to gv column type
 			 */
 			$field_types = array();
 			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // S (0) - text
+				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
 			}
 			break;
 		case 'category2':
@@ -342,16 +343,16 @@ function pg_to_gviz_basic(
 			}
 			/*
 			 * build the (OUTPUT) column type array with defaults
-			 * the defaults are 0 = string
+			 * the defaults are O (0) = map from original pg field type to gv column type
 			 */
 			$field_types = array();
 			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // S (0) - text
+				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
 			}
 			break;
 		case 'generic':
-			// make them all text and then slither on...
-			$output_type = str_repeat('s',$max_num_fields);
+			// make them all maps from original pg field type to gv column types
+			$output_type = str_repeat('o',$max_num_fields);
 		default:
 			$data_table_name = getargs ("data_table_name",$data_table_name);
 			$series_fields = getargs ("series_fields",$series_fields);
@@ -375,11 +376,11 @@ function pg_to_gviz_basic(
 			}
 			/*
 			 * build the (OUTPUT) column type array with defaults
-			* the defaults are 0 = string
-			*/
+			 * the defaults are O (0) = map from original pg field type to gv column type
+			 */
 			$field_types = array();
 			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // S (0) - text
+				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
 			}
 			/*
 			 * blow up any string that exists into a series of acceptable field types
@@ -387,6 +388,9 @@ function pg_to_gviz_basic(
 			for ($i=0;$i<strlen(trim($output_type));++$i) {
 				$field_types[] = 0;
 				switch (strtolower($output_type[$i])) {
+					case 'o': // O (0) - map from original pg field type to gv column type
+						$field_types[$i] = 0;
+						break;
 					case 'n': // N (1) - number
 						$field_types[$i] = 1;
 						break;
@@ -402,8 +406,11 @@ function pg_to_gviz_basic(
 					case 'a': // A (5) - datetime
 						$field_types[$i] = 5;
 						break;
-					default: // S (0) - text
-						//leave $field_types[$i] as 0 - i.e. string
+					case 's': // S (6) - text
+						$field_types[$i] = 6;
+						break;
+					default: // O (0) - map from original pg field type to gv column type
+						$field_types[$i] = 0;
 				}
 			}
 	}
@@ -960,9 +967,12 @@ function pg_to_gviz_basic(
 					case 5: // A (5) - datetime
 						$datatable["cols"][$series_counter]["type"] = "datetime";
 						break;
-					case 0: // S (0) - text
-					default:
+					case 6: // S (6) - text
 						$datatable["cols"][$series_counter]["type"] = "text";
+						break;
+					case 0: // O (0) - mapping from pg field type to gv column type
+					default:
+						$datatable["cols"][$series_counter]["type"] = ;
 				}
 				++$series_counter;
 			}
