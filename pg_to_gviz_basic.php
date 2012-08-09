@@ -107,11 +107,11 @@ function pg_to_gviz_basic(
 	/*
 	 * csv - used by google, comma delimited text file
 	 * json - used by google, json data source for gv objects
-	 * unfortunately, we'll need a third dimension, since the field types change based on the gv object type, $output_gv_type
-	 * table - the default for now
-	 * column_graph
-	 * annotated_time_line
-	 * etc. as needed
+	 *   unfortunately, we'll need a third dimension, since the field types change based on the gv object type, $output_gv_type
+	 *   table - the default for now
+	 *   column_graph
+	 *   annotated_time_line
+	 *   etc. as needed
 	 * html_table_raw -
 	 * html_table_2d -
 	 */
@@ -512,19 +512,66 @@ function pg_to_gviz_basic(
 			$datatable = array();
 			$datatable["cols"][0]["id"] = "category";
 			$datatable["cols"][0]["label"] = $cat_lbl;
-			$datatable["cols"][0]["type"] = "string";
+			$series_counter = 0;
+			switch ($field_types[$series_counter]) {
+				case 1: // N (1) - number
+					$datatable["cols"][$series_counter]["type"] = "number";
+					break;
+				case 2: // B (2) - boolean
+					$datatable["cols"][$series_counter]["type"] = "boolean";
+					break;
+				case 3: // D (3) - date
+					$datatable["cols"][$series_counter]["type"] = "date";
+					break;
+				case 4: // T (4) - timeofday
+					$datatable["cols"][$series_counter]["type"] = "timeofday";
+					break;
+				case 5: // A (5) - datetime
+					$datatable["cols"][$series_counter]["type"] = "datetime";
+					break;
+				case 6: // S (6) - text
+					$datatable["cols"][$series_counter]["type"] = "text";
+					break;
+				case 0: // O (0) - mapping from pg field type to gv column type
+				default:
+					$pg_field_type = pg_field_type($data_pg_results,$series_counter);
+					$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
+			}
 			$series_fields_array = array();
 			$series_fields_array = explode(",",$series_fields);
 			if ($debug) echo "exploded series:<br>";
 			if ($debug) html_show_array($series_fields_array);
-			$series_counter = 0;
+			$series_counter = 1;
 			foreach ($series_fields_array as $series) {
-				$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
-				$datatable["cols"][$series_counter+1]["label"] = $series;
-				$datatable["cols"][$series_counter+1]["type"] = "number";
+				$datatable["cols"][$series_counter]["id"] = "series".($series_counter);
+				$datatable["cols"][$series_counter]["label"] = $series;
+				switch ($field_types[$series_counter]) {
+					case 1: // N (1) - number
+						$datatable["cols"][$series_counter]["type"] = "number";
+						break;
+					case 2: // B (2) - boolean
+						$datatable["cols"][$series_counter]["type"] = "boolean";
+						break;
+					case 3: // D (3) - date
+						$datatable["cols"][$series_counter]["type"] = "date";
+						break;
+					case 4: // T (4) - timeofday
+						$datatable["cols"][$series_counter]["type"] = "timeofday";
+						break;
+					case 5: // A (5) - datetime
+						$datatable["cols"][$series_counter]["type"] = "datetime";
+						break;
+					case 6: // S (6) - text
+						$datatable["cols"][$series_counter]["type"] = "text";
+						break;
+					case 0: // O (0) - mapping from pg field type to gv column type
+					default:
+						$pg_field_type = pg_field_type($data_pg_results,$series_counter);
+						$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
+				}
 				++$series_counter;
 			}
-			$table_column_count = $series_counter;
+			$table_column_count = $series_counter - 1;
 			if ($debug) echo "created gviz json array for $table_column_count series<br>";
 			// load the gviz json array with data
 			//
@@ -601,42 +648,26 @@ function pg_to_gviz_basic(
 			*
 			* as you surely expect, creating the list of rows and columns is the challenge
 			*   for categories, it can either be the derived from the data itself, or from a separate table
-			*   for series, it is derived from the data itself
-			* this structure is because of the evolution of this type, it was imagined to end up in a gviz graph,
+			*   and for series, it now (new) can either be the derived from the data itself, or from a separate table
+			* this particular structure evolved. it originally was imagined to end up in a gviz graph,
 			*   and this is a convenient data structure for creating multiple series graphs
 			*   i.e. a blank row (category) makes sense, but a blank column (series) makes less sense
+			*   however, further evolution allows blank columns, too, since the output might be a table where a blank
+			*   column might actually make sense
 			*
-			* note that categories and series require a index (integer) field and potentially a label field
+			* note that categories and series REQUIRE a index field (integer, timestamp) field
+			* and potentially can have a label field and also an external table of values
+			* 
+			* also note that now additional columns in the category table become additional columns in the output table
+			* and additional columns in the series table become additional rows in the output table
 			*
-			* first construct the query appropriate to the supplied args and get the data
+			* first construct the DATA TABLE queries appropriate to the supplied args and get the data
 			*/
-			// put the category (rows) fields in the the field list strings
-			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
-				$data_db_query_fields = "$category_index_field, $category_label_field, ";
-				$category_db_query_fields  = "$category_index_field, max($category_label_field) as $category_label_field";
-				$cat_lbl = $category_label_field;
-			} else {
-				$data_db_query_fields = "$category_index_field, ";
-				$category_db_query_fields  = "$category_index_field";
-				$cat_lbl = $category_index_field;
-			}
-			// now tack on the the series fields to the the field list strings
-			if (strlen(trim($series_label_field))) { // series label field supplied.  Yea, user!
-				$data_db_query_fields  .= "$series_index_field, $series_label_field, ";
-				$series_db_query_fields = "$series_index_field, max($series_label_field) as $series_label_field";
-				$ser_lbl = $series_label_field;
-			} else {
-				$data_db_query_fields  .= "$series_index_field, ";
-				$series_db_query_fields = "$series_index_field";
-				$ser_lbl = $series_index_field;
-			}
-			// now tack on the the series VALUE field
-			$data_db_query_fields .= "$series_value_field";
-			// the data basic query
+			$data_db_query_fields  = "$category_index_field, $series_index_field, $series_value_field";
 			$data_db_query = "SELECT $data_db_query_fields FROM $data_table_name";
-			// the category basic query
+			$category_db_query_fields  = "$category_index_field";
 			$category_db_query = "SELECT $category_db_query_fields FROM $data_table_name";
-			// the series basic query
+			$series_db_query_fields = "$series_index_field";
 			$series_db_query = "SELECT $series_db_query_fields FROM $data_table_name";
 			$where = 0;
 			/*
@@ -745,14 +776,54 @@ function pg_to_gviz_basic(
 			 */
 			// the data query
 			$data_pg_results = pg_query($dbhandle, $data_db_query);
+			if ($data_pg_results) {
+				if ($debug) echo "Successfully ran data table data query = $data_db_query.<br>";
+			} else {
+				echo "Error: Data table query failed.<br>";
+				echo "Error: query = $data_db_query.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
 			$data_num_records = pg_num_rows($data_pg_results);
 			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
+			/*
+			 * figure out the pg field types in the data table and convert to gviz column types...
+			 * note that category column could change if a label field is supplied in an external category table 
+			 */
+			$category_pg_field_type = pg_field_type($data_pg_results,0);
+			if ($debug) echo "category pg field is type $category_pg_field_type.<br>";
+			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
+			if ($debug) echo "category gviz column is type $category_gviz_column_type.<br>";
+			//
+			$series_pg_field_type = pg_field_type($data_pg_results,1);
+			if ($debug) echo "series pg field is type $series_pg_field_type.<br>";
+			//
+			$data_pg_field_type = pg_field_type($data_pg_results,2);
+			if ($debug) echo "data pg field is type $data_pg_field_type.<br>";
+			$series_gviz_column_type = pgtype_to_gvtype($data_pg_field_type);
+			if ($debug) echo "series gviz column is type $series_gviz_column_type.<br>";
 			// the series values query
 			$series_pg_results = pg_query($dbhandle, $series_db_query);
+			if ($series_pg_results) {
+				if ($debug) echo "Successfully ran data table series query = $series_db_query.<br>";
+			} else {
+				echo "Error: Data table series query failed.<br>";
+				if ($debug) echo "Error: query = $series_db_query.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
 			$series_num_records = pg_num_rows($series_pg_results);
 			if ($debug) echo "series_db_query resulted in $series_num_records records.<br>";
 			// the category values query.  note: could be replaced below if category table is defined and show all is set to true
 			$category_pg_results = pg_query($dbhandle, $category_db_query);
+			if ($category_pg_results) {
+				if ($debug) echo "Successfully ran data table category query = $category_db_query.<br>";
+			} else {
+				echo "Error: Data table category query failed.<br>";
+				if ($debug) echo "Error: query = $category_db_query.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
 			$category_num_records = pg_num_rows($category_pg_results);
 			if ($debug) echo "category_db_query resulted in $category_num_records records.<br>";
 			/*
@@ -761,137 +832,332 @@ function pg_to_gviz_basic(
 			 * note that we use the gviz json array format regardless of the output type
 			 *   this makes it easier for creating the gviz json with a single function call,
 			 *   the others are straightforward and can easily be extracted from the array
+			 *   
+			 *   INITIALLY use the category index field name and
+			 *   pg field to gviz column mapped type for the column 0 (category values) column header
+			 *   might change this later if a category label column is defined in the category table
 			 */
-			// use the category label (or category index) field name for the column 0 (category values) column header
 			$datatable = array();
-			$datatable["cols"][0]["id"] = "category";
-			$datatable["cols"][0]["label"] = $cat_lbl;
-			$datatable["cols"][0]["type"] = "string";
+			$cat_fld = $category_index_field;
+			$datatable["cols"][0]["id"] = $cat_fld;
+			$datatable["cols"][0]["label"] = $cat_fld;
+			$datatable["cols"][0]["type"] = $category_gviz_column_type;
 			/*
-			 * create an order hash for the series indices
-			 *
-			 * now we have to figure out whether to use the series in the data or the series in a separate table
-			 * we only need the series in the separate table if series show all = true,
-			 *   so the table has to be defined AND show_all has to = true
-			 *   if both are satisfied then get the series indices from the table, otherwise use the values already acquired from the data
-			 *
-			 * !!! assumes the series index and series label fields are the same in both the data and series tables !!!
+			 * now we have to figure out whether to use the categories in the data or the categories in a separate table
+			 * assumes the category index is the same in both the data and category tables
+			 * 
+			 * note that when using the external tables, we get ALL the values (i.e. no WHERE clause)
 			 */
-			if (strlen(trim($series_table_name)) && $series_show_all) {
-				// get a new list of series from the series table
-				if (strlen(trim($series_label_field))) { // category label field supplied.  Yea, user!
-					$series_db_query_fields  = "$series_index_field, max($series_label_field) as $series_label_field";
-					$ser_lbl = $series_label_field;
-				} else {
-					$series_db_query_fields  = "$series_index_field";
-					$ser_lbl = $series_index_field;
-				}
-				// the series basic query
-				$series_db_query = "SELECT $series_db_query_fields FROM $series_table_name";
-				// allow the series list to still be used if defined
-				if (strlen(trim($series_index_selections))) {
-					$series_db_query .= " WHERE (";
-					$index_counter = 0;
-					$series_indices = array();
-					$series_indices = explode(",",$series_index_selections);
-					foreach ($series_indices as $series_index) {
-						if ($index_counter) {
-							$series_db_query .= " OR";
+			$category_table_extra_fields = array();
+			$category_table_extra_field_types = array();
+			$category_table_extra_field_count = 0;
+			$category_num_records = 0;
+			if (strlen(trim($category_table_name)) && $category_show_all) {
+				if ($debug) echo "Processing category table $category_table_name.<br>";
+				// get the data from the table 
+				// first get the field list from the category basic query
+				$category_db_query_1 = "SELECT * FROM $category_table_name LIMIT 1";
+				$category_pg_results_1 = pg_query($dbhandle, $category_db_query_1);
+				if ($category_pg_results_1) {
+					if ($debug) echo "Successfully ran category table query 1 = $category_db_query_1.<br>";
+					$category_table_field_count = pg_num_fields($category_pg_results_1);
+					$category_table_index_found = false;
+					$category_table_label_found = false;
+					for ($i=0;$i<$category_table_field_count;++$i) {
+						$fieldname = pg_field_name($category_pg_results_1,$i);
+						if ($fieldname == $category_index_field) {
+							$category_table_index_found = true;
+							$indexfieldtype = pg_field_type($category_pg_results_1,$i);
+						} elseif ($fieldname == $category_label_field) {
+							$category_table_label_found = true;
+							$labelfieldtype = pg_field_type($category_pg_results_1,$i);
+						} else {
+							$category_table_extra_fields[] = pg_field_name($category_pg_results_1,$i);
+							$category_table_extra_field_types[] = pg_field_type($category_pg_results_1,$i);
+							++$category_table_extra_field_count;
 						}
-						$series_db_query .= " $series_index_field = $series_index";
-						++$index_counter;
 					}
-					$series_db_query .= " )";
+					if ($category_table_index_found) {
+						$cat_fld = $category_index_field;
+						$category_db_query_fields = $category_index_field;
+						$datatable["cols"][0]["id"] = $cat_fld;
+						$datatable["cols"][0]["label"] = $cat_fld;
+						$datatable["cols"][0]["type"] = pgtype_to_gvtype($indexfieldtype);
+						if ($category_table_label_found) {
+							$cat_fld = $category_label_field;
+							$category_db_query_fields .= ",max($category_label_field) as $category_label_field";
+							$datatable["cols"][0]["id"] = $cat_fld;
+							$datatable["cols"][0]["label"] = $cat_fld;
+							$datatable["cols"][0]["type"] = pgtype_to_gvtype($labelfieldtype);
+						}
+						for ($i=0;$i<$category_table_extra_field_count;++$i) {
+							$category_db_query_fields .= ",max(".$category_table_extra_fields[$i].") as ".$category_table_extra_fields[$i];
+						}
+						$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name GROUP BY $category_index_field ORDER BY $category_index_field";
+						$category_pg_results_2 = pg_query($dbhandle, $category_db_query_2);
+						if ($category_pg_results_2) {
+							if ($debug) echo "Successfully ran category table query 2 = $category_db_query_2.<br>";
+							// replace data table categories with the ones in the category table
+							$category_pg_results = $category_pg_results_2;
+							$category_num_records = pg_num_rows($category_pg_results);
+						} else {
+							if ($debug) echo "Warning: Category table query 2 failed.<br>";
+							if ($debug) echo "Warning: query = $category_db_query_2.<br>";
+							if ($debug) echo "Warning: Ignoring category table.<br>";
+						}
+					} else {
+						if ($debug) echo "Warning: Index field not found in category table.<br>";
+						if ($debug) echo "Warning: Ignoring category table.<br>";
+					}
+				} else {
+					if ($debug) echo "Warning: Category table query 1 failed.<br>";
+					if ($debug) echo "Warning: query = $category_db_query_1.<br>";
+					if ($debug) echo "Warning: Ignoring category table.<br>";
 				}
-				$series_db_query .= " GROUP BY $series_index_field ORDER BY $series_index_field";
-				if ($debug) echo "replacement series_db_query: $series_db_query<br>";
-				// the replacement series values query
-				$series_pg_results = pg_query($dbhandle, $series_db_query);
-				$series_num_records = pg_num_rows($series_pg_results);
-				if ($debug) echo "replacement series_db_query resulted in $series_num_records records.<br>";
 			}
 			/*
-			 * create an order hash for the series indices
-			 * and also label the json array columns (series) with the series label (or index) value for each series
+			 * figure out whether to use the series in the data or the series in a separate table
+			 * assumes the series index is the same in both the data and series tables
+			 */
+			$ser_fld = $series_index_field;
+			$series_table_extra_fields = array();
+			$series_table_extra_field_types = array();
+			$series_table_extra_field_count = 0;
+			if (strlen(trim($series_table_name)) && $series_show_all) {
+				if ($debug) echo "Processing series table $series_table_name.<br>";
+				// get the data from the table
+				// first get the field list from the series basic query
+				$series_db_query_1 = "SELECT * FROM $series_table_name LIMIT 1";
+				$series_pg_results_1 = pg_query($dbhandle, $series_db_query_1);
+				if ($series_pg_results_1) {
+					if ($debug) echo "Successfully ran series table query 1 = $series_db_query_1.<br>";
+					$series_table_field_count = pg_num_fields($series_pg_results_1);
+					$series_table_index_found = false;
+					$series_table_label_found = false;
+					for ($i=0;$i<$series_table_field_count;++$i) {
+						$fieldname = pg_field_name($series_pg_results_1,$i);
+						if ($fieldname == $series_index_field) {
+							$series_table_index_found = true;
+							$indexfieldtype = pg_field_type($series_pg_results_1,$i);
+						} elseif ($fieldname == $series_label_field) {
+							$series_table_label_found = true;
+							$labelfieldtype = pg_field_type($series_pg_results_1,$i);
+						} else {
+							/*
+							 * only use it if it's the identical field type as the data
+							 * because the data for these extra rows has to go in the same columns as the other data 
+							 */
+							$tmp_type = pg_field_type($series_pg_results_1,$i);
+							$tmp_name = pg_field_name($series_pg_results_1,$i);
+							if ($tmp_type == $data_pg_field_type) {
+								$series_table_extra_fields[] = $tmp_name;
+								$series_table_extra_field_types[] = $tmp_type;
+								++$series_table_extra_field_count;
+							} else {
+								if ($debug) echo "Warning: ignoring extra series $tmp_name from the series table $series_table_name.<br>";
+								if ($debug) echo "Warning: it has type $tmp_type which does not match data type $data_pg_field_type <br>";
+							}
+						}
+					}
+					if ($series_table_index_found) {
+						$ser_fld = $series_index_field;
+						$series_db_query_fields = $series_index_field;
+						if ($series_table_label_found) {
+							$ser_fld = $series_label_field;
+							$series_db_query_fields .= ",max($series_label_field) as $series_label_field";
+						}
+						for ($i=0;$i<$series_table_extra_field_count;++$i) {
+							$series_db_query_fields .= ",max(".$series_table_extra_fields[$i].") as ".$series_table_extra_fields[$i];
+						}
+						$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name GROUP BY $series_index_field ORDER BY $series_index_field";
+						$series_pg_results_2 = pg_query($dbhandle, $series_db_query_2);
+						if ($series_pg_results_2) {
+							if ($debug) echo "Successfully ran series table query 2 = $series_db_query_2.<br>";
+							// replace data table series with the ones in the series table
+							$series_pg_results = $series_pg_results_2;
+							$series_num_records = pg_num_rows($series_pg_results);
+						} else {
+							if ($debug) echo "Warning: series table query 2 failed.<br>";
+							if ($debug) echo "Warning: query = $series_db_query_2.<br>";
+							if ($debug) echo "Warning: Ignoring series table.<br>";
+						}
+					} else {
+						if ($debug) echo "Warning: Index field not found in series table.<br>";
+						if ($debug) echo "Warning: Ignoring series table.<br>";
+					}
+						
+				} else {
+					if ($debug) echo "Warning: Series table query 1 failed.<br>";
+					if ($debug) echo "Warning: query = $series_db_query_1.<br>";
+					if ($debug) echo "Warning: ignoring series table.<br>";
+				}
+			}
+			/*
+			 * create the series columns
 			 */
 			$series_counter = 0;
 			while ($series_row = pg_fetch_object($series_pg_results)) {
 				$series_hash[$series_row->$series_index_field] = $series_counter;
 				$datatable["cols"][$series_counter+1]["id"] = "series".($series_counter+1);
-				$datatable["cols"][$series_counter+1]["label"] = $series_row->$ser_lbl;
-				$datatable["cols"][$series_counter+1]["type"] = "number";
+				$datatable["cols"][$series_counter+1]["label"] = $series_row->$ser_fld;
+				$datatable["cols"][$series_counter+1]["type"] = pgtype_to_gvtype($data_pg_field_type);
 				++$series_counter;
 			}
-			$table_column_count = $series_counter;
-			if ($debug) echo "created gviz json array structure for $series_counter series<br>";
 			/*
-			 * create an order hash for the category indices
-			 *
-			 * now we have to figure out whether to use the categories in the data or the categories in a separate table
-			 * we only need the categories in the separate table if show all = true,
-			 *   so the table has to be defined AND show_all has to = true
-			 *   if both are satisfied then get the categories from the table, otherwise use the values already acquired from the data
-			 *
-			 * !!! assumes the category index and category label fields are the same in both the data and category tables !!!
-			 */
-			if (strlen(trim($category_table_name)) && $category_show_all) {
-				// get a new list of categories from the category table
-				if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
-					$category_db_query_fields  = "$category_index_field, max($category_label_field) as $category_label_field";
-					$cat_lbl = $category_label_field;
-				} else {
-					$category_db_query_fields  = "$category_index_field";
-					$cat_lbl = $category_index_field;
-				}
-				// the category basic query
-				$category_db_query = "SELECT $category_db_query_fields FROM $category_table_name";
-				// allow the category list to still be used if defined
-				if (strlen(trim($category_index_selections))) {
-					$category_db_query .= " WHERE (";
-					$index_counter = 0;
-					$category_indices = array();
-					$category_indices = explode(",",$category_index_selections);
-					foreach ($category_indices as $category_index) {
-						if ($index_counter) {
-							$category_db_query .= " OR";
-						}
-						$category_db_query .= " $category_index_field = $category_index";
-						++$index_counter;
-					}
-					$category_db_query .= " )";
-				}
-				$category_db_query .= " GROUP BY $category_index_field ORDER BY $category_index_field";
-				if ($debug) echo "replacement category_db_query: $category_db_query<br>";
-				// the replacement category values query
-				$category_pg_results = pg_query($dbhandle, $category_db_query);
-				$category_num_records = pg_num_rows($category_pg_results);
-				if ($debug) echo "replacement category_db_query resulted in $category_num_records records.<br>";
+			 * add the extra category columns
+			*/
+			for ($i=0;$i<$category_table_extra_field_count;++$i) {
+				$datatable["cols"][$i+$series_num_records+1]["id"] = "category_metadata".($i+1);
+				$datatable["cols"][$i+$series_num_records+1]["label"] = $category_table_extra_fields[$i];
+				$datatable["cols"][$i+$series_num_records+1]["type"] = pgtype_to_gvtype($category_table_extra_field_types[$i]);
 			}
+			
+			
 			/*
-			 * now create the category hash
-			 * and load up column 0 with category labels
+			 * create the category hash
+			 * and load up column 0 with category values (indices or labels)
 			 * and fill out the empty array with the default value
+			 * and fill out the extra columns with data from the category table (if any)
 			 */
 			$default_value = null;
 			$category_hash = array();
 			$category_row_count = 0;
 			while ($category_row = pg_fetch_object($category_pg_results)) {
-				$datatable["rows"][$category_row_count]["c"][0]["v"] = $category_row->$cat_lbl;
+				/*
+				 * create the column 0 VALUE
+				 *    it might NOT be the index value, might be a label, or some other string
+				 *    for example, if it's a JSON output to GViz object,
+				 *    convert from date, timestamp, etc strings to the appropriate output string like "new Date(xxx)"
+				 */
+				$val = null;
+				switch ($output_format) {
+					case 'json':
+						switch ($output_gv_type) {
+							case 'table':
+							case 'line_graph':
+							case 'column_graph':
+							case 'annotated_time_line':
+							case 'filter':
+							default:
+								$val = pgtypeval_to_gvval($category_pg_field_type,$category_row->$cat_fld);
+						}
+						break;
+					case 'csv':
+					case 'html_table_2d':
+					case 'html_table_raw':
+					default:
+						$val = $category_row->$cat_fld;
+				}
+				$datatable["rows"][$category_row_count]["c"][0]["v"] = $val;
+				/*
+				 * create the column 0 VALUE
+				 *    it might NOT be the index value, might be a label, or some other string
+				 *    for example, if it's a JSON output to GViz object,
+				 *    convert from date, timestamp, etc strings to the appropriate output string like "new Date(xxx)"
+				 */
+				$ndx = pgtypeval_to_hashindex($category_pg_field_type,$category_row->$category_index_field);
+				/*
+				 * save the index in the hash table
+				 */
 				$category_hash[$category_row->$category_index_field] = $category_row_count;
-				for ($category_series_counter=0;$category_series_counter<$table_column_count;++$category_series_counter) {
-					$datatable["rows"][$category_row_count]["c"][$category_series_counter+1]["v"] = $default_value;
+				/*
+				 * fill out the upper left quadrant with default values (this is where data from the n-tuple data goes)
+				 */
+				for ($i=0;$i<$series_num_records;++$i) {
+					$datatable["rows"][$category_row_count]["c"][$i+1]["v"] = $default_value;
+				}
+				/*
+				 * now populate the upper right quadrant (extra columns for extra fields in the category table)
+				 */
+				for ($i=0;$i<$category_table_extra_field_count;++$i) {
+					$datatable["rows"][$category_row_count]["c"][$i+$series_num_records+1]["v"] = $category_row->$category_table_extra_fields[$i];
 				}
 				++$category_row_count;
 			}
-			$table_row_count = $category_row_count;
-			if ($debug) echo "created empty json array with $category_row_count records<br>";
+			if ($debug) echo "category hash table<br>";
+			if ($debug) html_show_array($category_hash);
+			/*
+			 * take care of the lower left quadrant
+			 * 
+			 * add the extra series row headers
+			 */
+			for ($i=0;$i<$series_table_extra_field_count;++$i) {
+				$datatable["rows"][$i+$category_num_records]["c"][0]["v"] = $series_table_extra_fields[$i];
+			}
+			/*
+			 * add the extra series data and make the series hash table
+			 */
+			$series_counter = 0;
+			while ($series_row = pg_fetch_object($series_pg_results)) {
+				$series_hash[$series_row->$series_index_field] = $series_counter;
+				for ($i=0;$i<$series_table_extra_field_count;++$i) {
+					$datatable["rows"][$i+$category_num_records]["c"][$series_counter+1]["v"] = $series_row->$series_table_extra_fields[$i];
+				}
+				++$series_counter;
+			}
+			if ($debug) echo "series hash table<br>";
+			if ($debug) html_show_array($series_hash);
+			/*
+			 * fill out the lower right quadrant with nulls
+			 */
+			for ($i=0;$i<$category_table_extra_field_count;++$i) {
+				for ($j=0;$j<$series_table_extra_field_count;++$j) {
+					$datatable["rows"][$j+$category_num_records]["c"][$i+$series_num_records+1]["v"] = null;
+				}
+			}
+			if ($debug) echo "created empty json array with $category_num_records data rows + $series_table_extra_field_count extra rows<br>";
+			if ($debug) echo "created empty json array with 1 category column + $series_num_records series columns + $category_table_extra_field_count extra columns<br>";
 			// now put the data into the data table, using the hash tables
 			$data_row_count = 0;
+			pg_result_seek($data_pg_results, 0);
 			while ($data_row = pg_fetch_object($data_pg_results)) {
-				$table_row = $category_hash[$data_row->$category_index_field];
-				$table_column = $series_hash[$data_row->$series_index_field];
-				$datatable["rows"][$table_row]["c"][$table_column+1]["v"] = $data_row->$series_value_field * $conv_factor;
-				++$data_row_count;
+				$category_index_value = $data_row->$category_index_field;
+				$series_index_value = $data_row->$series_index_field;
+				$series_value_value = $data_row->$series_value_field;
+				if (array_key_exists($category_index_value,$category_hash)) {
+					$category_hash_value = $category_hash[$category_index_value]; // $table_row
+					if (array_key_exists($series_index_value,$series_hash)) {
+						$series_hash_value = $series_hash[$series_index_value]; // $table_column
+						switch ($output_format) {
+							case 'json':
+								switch ($output_gv_type) {
+									case 'table':
+									case 'line_graph':
+									case 'column_graph':
+									case 'annotated_time_line':
+									case 'filter':
+									default:
+										$val = pgtypeval_to_gvval($data_pg_field_type,$series_value_value);
+								}
+								break;
+							case 'csv':
+							case 'html_table_2d':
+							case 'html_table_raw':
+							default:
+								$val = $series_value_value;
+									
+						}
+						switch ($data_pg_field_type) {
+							case 'numeric': // a "numeric" real number field from a pg database
+							case 'float4': // a single precision real number field from a pg database
+							case 'float8': // a double precision real number field from a pg database
+								$val = $val * $conv_factor;
+								break;
+							default:
+						}
+						$datatable["rows"][$category_hash_value]["c"][$series_hash_value+1]["v"] = $val;
+						++$data_row_count;
+					} else {
+						if ($debug) echo "Warning: data ignored.<br>";
+						if ($debug) echo "Warning: a record from the table $data_table_name was ignored because the series index $series_index_value did not match any values in the series \"hash\" table.<br>";
+						if ($debug) echo "Warning: category index = $category_index_value series index = $series_index_value value = $series_value_value<br>";
+					}
+				} else {
+					if ($debug) echo "Warning: data ignored.<br>";
+					if ($debug) echo "Warning: a record from the table $data_table_name was ignored because the category index $category_index_value did not match any values in the category \"hash\" table.<br>";
+					if ($debug) echo "Warning: category index = $category_index_value series index = $series_index_value value = $series_value_value<br>";
+				}
+				
 			}
 			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
 			break;
@@ -972,7 +1238,7 @@ function pg_to_gviz_basic(
 						break;
 					case 0: // O (0) - mapping from pg field type to gv column type
 					default:
-						$pg_field_type = pg_field_type($data_pg_results,$series_counter)
+						$pg_field_type = pg_field_type($data_pg_results,$series_counter);
 						$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
 				}
 				++$series_counter;
@@ -985,6 +1251,7 @@ function pg_to_gviz_basic(
 				$data_series_counter = 0;
 				foreach ($series_fields_array as $series) {
 					$datatable["rows"][$data_row_count]["c"][$data_series_counter]["v"] = $data_row->$series;
+					if ($debug) echo $data_row->$series."<br>";
 					++$data_series_counter;
 				}
 				++$data_row_count;
