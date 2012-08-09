@@ -791,11 +791,13 @@ function pg_to_gviz_basic(
 			 * note that category column could change if a label field is supplied in an external category table 
 			 */
 			$category_pg_field_type = pg_field_type($data_pg_results,0);
-			if ($debug) echo "category pg field is type $category_pg_field_type.<br>";
+			$category_index_field_type = $category_pg_field_type;
+			if ($debug) echo "data table category pg field currently is type $category_pg_field_type.<br>";
 			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
-			if ($debug) echo "category gviz column is type $category_gviz_column_type.<br>";
+			if ($debug) echo "gviz category column currently set to type $category_gviz_column_type.<br>";
 			//
 			$series_pg_field_type = pg_field_type($data_pg_results,1);
+			$series_index_field_type = $series_pg_field_type;
 			if ($debug) echo "series pg field is type $series_pg_field_type.<br>";
 			//
 			$data_pg_field_type = pg_field_type($data_pg_results,2);
@@ -867,10 +869,10 @@ function pg_to_gviz_basic(
 						$fieldname = pg_field_name($category_pg_results_1,$i);
 						if ($fieldname == $category_index_field) {
 							$category_table_index_found = true;
-							$indexfieldtype = pg_field_type($category_pg_results_1,$i);
+							$category_table_index_pg_field_type = pg_field_type($category_pg_results_1,$i);
 						} elseif ($fieldname == $category_label_field) {
 							$category_table_label_found = true;
-							$labelfieldtype = pg_field_type($category_pg_results_1,$i);
+							$category_table_label_pg_field_type = pg_field_type($category_pg_results_1,$i);
 						} else {
 							$category_table_extra_fields[] = pg_field_name($category_pg_results_1,$i);
 							$category_table_extra_field_types[] = pg_field_type($category_pg_results_1,$i);
@@ -880,16 +882,15 @@ function pg_to_gviz_basic(
 					if ($category_table_index_found) {
 						$cat_fld = $category_index_field;
 						$category_db_query_fields = $category_index_field;
-						$datatable["cols"][0]["id"] = $cat_fld;
-						$datatable["cols"][0]["label"] = $cat_fld;
-						$datatable["cols"][0]["type"] = pgtype_to_gvtype($indexfieldtype);
+						$category_pg_field_type = $category_table_index_pg_field_type;
 						if ($category_table_label_found) {
 							$cat_fld = $category_label_field;
 							$category_db_query_fields .= ",max($category_label_field) as $category_label_field";
-							$datatable["cols"][0]["id"] = $cat_fld;
-							$datatable["cols"][0]["label"] = $cat_fld;
-							$datatable["cols"][0]["type"] = pgtype_to_gvtype($labelfieldtype);
+							$category_pg_field_type = $category_table_label_pg_field_type;
 						}
+						$datatable["cols"][0]["id"] = $cat_fld;
+						$datatable["cols"][0]["label"] = $cat_fld;
+						$datatable["cols"][0]["type"] = $category_pg_field_type;
 						for ($i=0;$i<$category_table_extra_field_count;++$i) {
 							$category_db_query_fields .= ",max(".$category_table_extra_fields[$i].") as ".$category_table_extra_fields[$i];
 						}
@@ -1054,12 +1055,15 @@ function pg_to_gviz_basic(
 				 *    it might NOT be the index value, might be a label, or some other string
 				 *    for example, if it's a JSON output to GViz object,
 				 *    convert from date, timestamp, etc strings to the appropriate output string like "new Date(xxx)"
+				 *    
+				 *    not sure if I'll use this yet...
 				 */
 				$ndx = pgtypeval_to_hashindex($category_pg_field_type,$category_row->$category_index_field);
 				/*
 				 * save the index in the hash table
 				 */
-				$category_hash[$category_row->$category_index_field] = $category_row_count;
+				$ndx = $category_row->$category_index_field;
+				$category_hash[$ndx] = $category_row_count;
 				/*
 				 * fill out the upper left quadrant with default values (this is where data from the n-tuple data goes)
 				 */
@@ -1070,7 +1074,8 @@ function pg_to_gviz_basic(
 				 * now populate the upper right quadrant (extra columns for extra fields in the category table)
 				 */
 				for ($i=0;$i<$category_table_extra_field_count;++$i) {
-					$datatable["rows"][$category_row_count]["c"][$i+$series_num_records+1]["v"] = $category_row->$category_table_extra_fields[$i];
+					$val = $category_row->$category_table_extra_fields[$i];
+					$datatable["rows"][$category_row_count]["c"][$i+$series_num_records+1]["v"] = pgtypeval_to_gvval($category_table_extra_field_types[$i],$val);
 				}
 				++$category_row_count;
 			}
@@ -1089,7 +1094,8 @@ function pg_to_gviz_basic(
 			 */
 			$series_counter = 0;
 			while ($series_row = pg_fetch_object($series_pg_results)) {
-				$series_hash[$series_row->$series_index_field] = $series_counter;
+				$ndx = $series_row->$series_index_field;
+				$series_hash[$ndx] = $series_counter;
 				for ($i=0;$i<$series_table_extra_field_count;++$i) {
 					$datatable["rows"][$i+$category_num_records]["c"][$series_counter+1]["v"] = $series_row->$series_table_extra_fields[$i];
 				}
