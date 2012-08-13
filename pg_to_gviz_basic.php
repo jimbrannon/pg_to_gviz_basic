@@ -665,6 +665,7 @@ function pg_to_gviz_basic(
 			*/
 			$data_db_query_fields  = "$category_index_field, $series_index_field, $series_value_field";
 			$data_db_query = "SELECT $data_db_query_fields FROM $data_table_name";
+			$data_db_query_where = "";
 			$category_db_query_fields  = "$category_index_field";
 			$category_db_query = "SELECT $category_db_query_fields FROM $data_table_name";
 			$series_db_query_fields = "$series_index_field";
@@ -722,6 +723,7 @@ function pg_to_gviz_basic(
 			 */
 			if (strlen(trim($category_index_selections))) {
 				$data_db_query .= " WHERE (";
+				$data_db_query_where .= " WHERE (";
 				$series_db_query .= " WHERE (";
 				$category_db_query .= " WHERE (";
 				$where = 1;
@@ -731,15 +733,18 @@ function pg_to_gviz_basic(
 				foreach ($category_indices as $category_index) {
 					if ($index_counter) {
 						$data_db_query .= " OR";
+						$data_db_query_where .= " OR";
 						$series_db_query .= " OR";
 						$category_db_query .= " OR";
 					}
 					$data_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
+					$data_db_query_where .= " $data_table_name.$category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
 					$series_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
 					$category_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
 					++$index_counter;
 				}
 				$data_db_query .= " )";
+				$data_db_query_where .= " )";
 				$series_db_query .= " )";
 				$category_db_query .= " )";
 			}
@@ -761,10 +766,12 @@ function pg_to_gviz_basic(
 					$filter_pg_field_type = pg_field_type($filter_pg_results,0);
 					if ($where) {
 						$data_db_query .= " AND (";
+						$data_db_query_where .= " AND (";
 						$series_db_query .= " AND (";
 						$category_db_query .= " AND (";
 					} else {
 						$data_db_query .= " WHERE (";
+						$data_db_query_where .= " WHERE (";
 						$series_db_query .= " WHERE (";
 						$category_db_query .= " WHERE (";
 						$where = 1;
@@ -775,15 +782,18 @@ function pg_to_gviz_basic(
 					foreach ($filter_indices as $filter_index) {
 						if ($index_counter) {
 							$data_db_query .= " OR";
+							$data_db_query_where .= " OR";
 							$series_db_query .= " OR";
 							$category_db_query .= " OR";
 						}
 						$data_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
+						$data_db_query_where .= " $data_table_name.$filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
 						$series_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
 						$category_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
 						++$index_counter;
 					}
 					$data_db_query .= " )";
+					$data_db_query_where .= " )";
 					$series_db_query .= " )";
 					$category_db_query .= " )";
 				} else {
@@ -810,15 +820,18 @@ function pg_to_gviz_basic(
 					$drupal_pg_field_type = pg_field_type($drupal_pg_results,0);
 					if ($where) {
 						$data_db_query .= " AND (";
+						$data_db_query_where .= " AND (";
 						$series_db_query .= " AND (";
 						$category_db_query .= " AND (";
 					} else {
 						$data_db_query .= " WHERE (";
+						$data_db_query_where .= " WHERE (";
 						$series_db_query .= " WHERE (";
 						$category_db_query .= " WHERE (";
 						$where = 1;
 					}
 					$data_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
+					$data_db_query_where .= " $data_table_name.$drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 					$series_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 					$category_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 				} else {
@@ -965,11 +978,7 @@ function pg_to_gviz_basic(
 								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name GROUP BY $category_index_field ORDER BY $category_index_field";
 							}
 						} else {
-							if ($category_table_drupal_found) {
-								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name JOIN $data_table_name USING ($category_index_field) WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($category_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $category_index_field ORDER BY $category_index_field";
-							} else {
-								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name JOIN $data_table_name USING ($category_index_field) GROUP BY $category_index_field ORDER BY $category_index_field";
-							}
+							$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name JOIN $data_table_name USING ($category_index_field) $data_db_query_where GROUP BY $category_index_field ORDER BY $category_index_field";
 						}
 						$category_pg_results_2 = pg_query($dbhandle, $category_db_query_2);
 						if ($category_pg_results_2) {
@@ -1062,11 +1071,7 @@ function pg_to_gviz_basic(
 								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name GROUP BY $series_index_field ORDER BY $series_index_field";
 							}
 						} else {
-							if ($series_table_drupal_found) {
-								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name JOIN $data_table_name USING ($series_index_field) WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($series_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $series_index_field ORDER BY $series_index_field";
-							} else {
-								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name JOIN $data_table_name USING ($series_index_field) GROUP BY $series_index_field ORDER BY $series_index_field";
-							}
+							$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name JOIN $data_table_name USING ($series_index_field) $data_db_query_where GROUP BY $series_index_field ORDER BY $series_index_field";
 						}
 						$series_pg_results_2 = pg_query($dbhandle, $series_db_query_2);
 						if ($series_pg_results_2) {
