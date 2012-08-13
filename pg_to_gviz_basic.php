@@ -671,12 +671,55 @@ function pg_to_gviz_basic(
 			$series_db_query = "SELECT $series_db_query_fields FROM $data_table_name";
 			$where = 0;
 			/*
-			* now the optional WHERE clause(s) if necessary
+			 * have to figure out field types in order to create where clauses - stupid pg delimiters
+			 */
+			$data_pg_results = pg_query($dbhandle, $data_db_query." LIMIT 1");
+			if ($data_pg_results) {
+				if ($debug) echo "Successfully ran data table test query = $data_db_query LIMIT 1.<br>";
+			} else {
+				echo "Error: Data table test query failed.<br>";
+				echo "Error: query = $data_db_query LIMIT 1.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
+			/*
+			* figure out the pg field types in the data table and convert to gviz column types...
+			* note that category column could change if a label field is supplied in an external category table
 			*
-			* first is when a list of category indices are defined
-			*   i.e. a filter - do not include rows where the category value is not in this list
-			*   the category index field MUST be defined, so we can assume this is OK
+			*  the following is the pg field type of the field BEING USED AS THE CATEGORY OUTPUT VALUES
+			*  it might not be the index field if a lable field is deinfed
 			*/
+			$category_pg_field_type = pg_field_type($data_pg_results,0);
+			/*
+			* the following is the field type of the category index field,
+			* regardless of what field is used to create the category values in the JSON table
+			*
+			* FYI - this is ALWAYS the field used as the hash table index
+			*/
+			$category_index_field_type = $category_pg_field_type;
+			if ($debug) echo "data table category pg field currently is type $category_pg_field_type.<br>";
+			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
+			if ($debug) echo "gviz category column currently set to type $category_gviz_column_type.<br>";
+			/*
+			* the series field type
+			*/
+			$series_pg_field_type = pg_field_type($data_pg_results,1);
+			$series_index_field_type = $series_pg_field_type;
+			if ($debug) echo "series pg field is type $series_pg_field_type.<br>";
+			/*
+			* the data value field type
+			*/
+			$data_pg_field_type = pg_field_type($data_pg_results,2);
+			if ($debug) echo "data pg field is type $data_pg_field_type.<br>";
+			$series_gviz_column_type = pgtype_to_gvtype($data_pg_field_type);
+			if ($debug) echo "series gviz column is type $series_gviz_column_type.<br>";
+			/*
+			 * now the optional WHERE clause(s) if necessary
+			 *
+			 * first is when a list of category indices are defined
+			 *   i.e. a filter - do not include rows where the category value is not in this list
+			 *   the category index field MUST be defined, so we can assume this is OK
+			 */
 			if (strlen(trim($category_index_selections))) {
 				$data_db_query .= " WHERE (";
 				$series_db_query .= " WHERE (";
@@ -691,9 +734,9 @@ function pg_to_gviz_basic(
 						$series_db_query .= " OR";
 						$category_db_query .= " OR";
 					}
-					$data_db_query .= " $category_index_field = $category_index";
-					$series_db_query .= " $category_index_field = $category_index";
-					$category_db_query .= " $category_index_field = $category_index";
+					$data_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
+					$series_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
+					$category_db_query .= " $category_index_field = ".pgtypeval_to_SQL($category_pg_field_type,$category_index);
 					++$index_counter;
 				}
 				$data_db_query .= " )";
@@ -708,33 +751,46 @@ function pg_to_gviz_basic(
 			*   the filter field may not be defined, so we have to handle this
 			*/
 			if (strlen(trim($filter_index_field)) && strlen(trim($filter_index_selections))) {
-				if ($where) {
-					$data_db_query .= " AND (";
-					$series_db_query .= " AND (";
-					$category_db_query .= " AND (";
-				} else {
-					$data_db_query .= " WHERE (";
-					$series_db_query .= " WHERE (";
-					$category_db_query .= " WHERE (";
-					$where = 1;
-				}
-				$index_counter = 0;
-				$filter_indices = array();
-				$filter_indices = explode(",",$filter_index_selections);
-				foreach ($filter_indices as $filter_index) {
-					if ($index_counter) {
-						$data_db_query .= " OR";
-						$series_db_query .= " OR";
-						$category_db_query .= " OR";
+				/*
+				 * determine the filter index field type
+				 */
+				$filter_db_query = "SELECT $filter_index_field FROM $data_table_name LIMIT 1";
+				$filter_pg_results = pg_query($dbhandle, $filter_db_query);
+				if ($filter_pg_results) {
+					if ($debug) echo "Successfully ran data table filter index field query = $filter_db_query<br>";
+					$filter_pg_field_type = pg_field_type($filter_pg_results,0);
+					if ($where) {
+						$data_db_query .= " AND (";
+						$series_db_query .= " AND (";
+						$category_db_query .= " AND (";
+					} else {
+						$data_db_query .= " WHERE (";
+						$series_db_query .= " WHERE (";
+						$category_db_query .= " WHERE (";
+						$where = 1;
 					}
-					$data_db_query .= " $filter_index_field = $filter_index";
-					$series_db_query .= " $filter_index_field = $filter_index";
-					$category_db_query .= " $filter_index_field = $filter_index";
-					++$index_counter;
+					$index_counter = 0;
+					$filter_indices = array();
+					$filter_indices = explode(",",$filter_index_selections);
+					foreach ($filter_indices as $filter_index) {
+						if ($index_counter) {
+							$data_db_query .= " OR";
+							$series_db_query .= " OR";
+							$category_db_query .= " OR";
+						}
+						$data_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
+						$series_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
+						$category_db_query .= " $filter_index_field = ".pgtypeval_to_SQL($filter_pg_field_type,$filter_index);
+						++$index_counter;
+					}
+					$data_db_query .= " )";
+					$series_db_query .= " )";
+					$category_db_query .= " )";
+				} else {
+					echo "Warning: Data table filter index field query failed.<br>";
+					echo "Warning: query = $filter_db_query<br>";
+					echo "Warning: not using filter index field.<br>";
 				}
-				$data_db_query .= " )";
-				$series_db_query .= " )";
-				$category_db_query .= " )";
 			}
 			/*
 			* STILL working on the optional WHERE clause(s)
@@ -744,19 +800,32 @@ function pg_to_gviz_basic(
 			*   the filter field may not be defined, so we have to handle this
 			*/
 			if (strlen(trim($drupal_user_id_field)) && strlen(trim($drupal_user_id))) { // we have a drupal_user id to handle
-				if ($where) {
-					$data_db_query .= " AND (";
-					$series_db_query .= " AND (";
-					$category_db_query .= " AND (";
+				/*
+				 * determine the drupal user id field type - should be an integer, but do it anyway
+				*/
+				$drupal_db_query = "SELECT $drupal_user_id_field FROM $data_table_name LIMIT 1";
+				$drupal_pg_results = pg_query($dbhandle, $drupal_db_query);
+				if ($drupal_pg_results) {
+					if ($debug) echo "Successfully ran data table drupal user id field query = $drupal_db_query<br>";
+					$drupal_pg_field_type = pg_field_type($drupal_pg_results,0);
+					if ($where) {
+						$data_db_query .= " AND (";
+						$series_db_query .= " AND (";
+						$category_db_query .= " AND (";
+					} else {
+						$data_db_query .= " WHERE (";
+						$series_db_query .= " WHERE (";
+						$category_db_query .= " WHERE (";
+						$where = 1;
+					}
+					$data_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
+					$series_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
+					$category_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 				} else {
-					$data_db_query .= " WHERE (";
-					$series_db_query .= " WHERE (";
-					$category_db_query .= " WHERE (";
-					$where = 1;
+					echo "Warning: Data table drupal user id field query failed.<br>";
+					echo "Warning: query = $drupal_db_query<br>";
+					echo "Warning: not using drupal user id field.<br>";
 				}
-				$data_db_query .= " $drupal_user_id_field = $drupal_user_id )";
-				$series_db_query .= " $drupal_user_id_field = $drupal_user_id )";
-				$category_db_query .= " $drupal_user_id_field = $drupal_user_id )";
 			}
 			/*
 			 * finally the ORDER BY and GROUP BY clauses
@@ -772,9 +841,8 @@ function pg_to_gviz_basic(
 			if ($debug) echo "series_db_query: $series_db_query<br>";
 			if ($debug) echo "category_db_query: $category_db_query<br>";
 			/*
-			 * now do the queries that are done in all cases
+			 * perform the data query
 			 */
-			// the data query
 			$data_pg_results = pg_query($dbhandle, $data_db_query);
 			if ($data_pg_results) {
 				if ($debug) echo "Successfully ran data table data query = $data_db_query.<br>";
@@ -787,36 +855,9 @@ function pg_to_gviz_basic(
 			$data_num_records = pg_num_rows($data_pg_results);
 			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
 			/*
-			 * figure out the pg field types in the data table and convert to gviz column types...
-			 * note that category column could change if a label field is supplied in an external category table 
+			 * perform the category values query
+			 * note: could be replaced below if category table is defined and show all is set to true
 			 */
-			$category_pg_field_type = pg_field_type($data_pg_results,0);
-			$category_index_field_type = $category_pg_field_type;
-			if ($debug) echo "data table category pg field currently is type $category_pg_field_type.<br>";
-			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
-			if ($debug) echo "gviz category column currently set to type $category_gviz_column_type.<br>";
-			//
-			$series_pg_field_type = pg_field_type($data_pg_results,1);
-			$series_index_field_type = $series_pg_field_type;
-			if ($debug) echo "series pg field is type $series_pg_field_type.<br>";
-			//
-			$data_pg_field_type = pg_field_type($data_pg_results,2);
-			if ($debug) echo "data pg field is type $data_pg_field_type.<br>";
-			$series_gviz_column_type = pgtype_to_gvtype($data_pg_field_type);
-			if ($debug) echo "series gviz column is type $series_gviz_column_type.<br>";
-			// the series values query
-			$series_pg_results = pg_query($dbhandle, $series_db_query);
-			if ($series_pg_results) {
-				if ($debug) echo "Successfully ran data table series query = $series_db_query.<br>";
-			} else {
-				echo "Error: Data table series query failed.<br>";
-				if ($debug) echo "Error: query = $series_db_query.<br>";
-				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
-				exit;
-			}
-			$series_num_records = pg_num_rows($series_pg_results);
-			if ($debug) echo "series_db_query resulted in $series_num_records records.<br>";
-			// the category values query.  note: could be replaced below if category table is defined and show all is set to true
 			$category_pg_results = pg_query($dbhandle, $category_db_query);
 			if ($category_pg_results) {
 				if ($debug) echo "Successfully ran data table category query = $category_db_query.<br>";
@@ -828,6 +869,20 @@ function pg_to_gviz_basic(
 			}
 			$category_num_records = pg_num_rows($category_pg_results);
 			if ($debug) echo "category_db_query resulted in $category_num_records records.<br>";
+			/*
+			 * perform the series values query
+			 */
+			$series_pg_results = pg_query($dbhandle, $series_db_query);
+			if ($series_pg_results) {
+				if ($debug) echo "Successfully ran data table series query = $series_db_query.<br>";
+			} else {
+				echo "Error: Data table series query failed.<br>";
+				if ($debug) echo "Error: query = $series_db_query.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
+			$series_num_records = pg_num_rows($series_pg_results);
+			if ($debug) echo "series_db_query resulted in $series_num_records records.<br>";
 			/*
 			 * create the gviz json array header records
 			 *
@@ -854,7 +909,7 @@ function pg_to_gviz_basic(
 			$category_table_extra_field_types = array();
 			$category_table_extra_field_count = 0;
 			$category_num_records = 0;
-			if (strlen(trim($category_table_name)) && $category_show_all) {
+			if (strlen(trim($category_table_name))) {
 				if ($debug) echo "Processing category table $category_table_name.<br>";
 				// get the data from the table 
 				// first get the field list from the category basic query
@@ -873,6 +928,9 @@ function pg_to_gviz_basic(
 						} elseif ($fieldname == $category_label_field) {
 							$category_table_label_found = true;
 							$category_table_label_pg_field_type = pg_field_type($category_pg_results_1,$i);
+						} elseif ($fieldname == $drupal_user_id_field && strlen(trim($drupal_user_id))) {
+							$category_table_drupal_found = true;
+							$category_table_drupal_pg_field_type = pg_field_type($category_pg_results_1,$i);
 						} else {
 							$category_table_extra_fields[] = pg_field_name($category_pg_results_1,$i);
 							$category_table_extra_field_types[] = pg_field_type($category_pg_results_1,$i);
@@ -894,11 +952,29 @@ function pg_to_gviz_basic(
 						for ($i=0;$i<$category_table_extra_field_count;++$i) {
 							$category_db_query_fields .= ",max(".$category_table_extra_fields[$i].") as ".$category_table_extra_fields[$i];
 						}
-						$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name GROUP BY $category_index_field ORDER BY $category_index_field";
+						/*
+						 * now figure whether to show all the category table values (show_all = true)
+						 * or just the ones that match the data, i.e. inner join (show_all = false)
+						 * 
+						 * also consider the drupal user id field
+						 */
+						if ($category_show_all) {
+							if ($category_table_drupal_found) {
+								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($category_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $category_index_field ORDER BY $category_index_field";
+							} else {
+								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name GROUP BY $category_index_field ORDER BY $category_index_field";
+							}
+						} else {
+							if ($category_table_drupal_found) {
+								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name JOIN $data_table_name USING ($category_index_field) WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($category_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $category_index_field ORDER BY $category_index_field";
+							} else {
+								$category_db_query_2 = "SELECT $category_db_query_fields FROM $category_table_name JOIN $data_table_name USING ($category_index_field) GROUP BY $category_index_field ORDER BY $category_index_field";
+							}
+						}
 						$category_pg_results_2 = pg_query($dbhandle, $category_db_query_2);
 						if ($category_pg_results_2) {
 							if ($debug) echo "Successfully ran category table query 2 = $category_db_query_2.<br>";
-							// replace data table categories with the ones in the category table
+							// replace data table category results with the category table category results
 							$category_pg_results = $category_pg_results_2;
 							$category_num_records = pg_num_rows($category_pg_results);
 						} else {
@@ -924,7 +1000,7 @@ function pg_to_gviz_basic(
 			$series_table_extra_fields = array();
 			$series_table_extra_field_types = array();
 			$series_table_extra_field_count = 0;
-			if (strlen(trim($series_table_name)) && $series_show_all) {
+			if (strlen(trim($series_table_name))) {
 				if ($debug) echo "Processing series table $series_table_name.<br>";
 				// get the data from the table
 				// first get the field list from the series basic query
@@ -943,6 +1019,9 @@ function pg_to_gviz_basic(
 						} elseif ($fieldname == $series_label_field) {
 							$series_table_label_found = true;
 							$labelfieldtype = pg_field_type($series_pg_results_1,$i);
+						} elseif ($fieldname == $drupal_user_id_field && strlen(trim($drupal_user_id))) {
+							$series_table_drupal_found = true;
+							$series_table_drupal_pg_field_type = pg_field_type($series_pg_results_1,$i);
 						} else {
 							/*
 							 * only use it if it's the identical field type as the data
@@ -970,7 +1049,25 @@ function pg_to_gviz_basic(
 						for ($i=0;$i<$series_table_extra_field_count;++$i) {
 							$series_db_query_fields .= ",max(".$series_table_extra_fields[$i].") as ".$series_table_extra_fields[$i];
 						}
-						$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name GROUP BY $series_index_field ORDER BY $series_index_field";
+						/*
+						 * now figure whether to show all the series table values (show_all = true)
+						 * or just the ones that match the data, i.e. inner join (show_all = false)
+						 * 
+						 * also consider the drupal user id field
+						 */
+						if ($series_show_all) {
+							if ($series_table_drupal_found) {
+								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($series_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $series_index_field ORDER BY $series_index_field";
+							} else {
+								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name GROUP BY $series_index_field ORDER BY $series_index_field";
+							}
+						} else {
+							if ($series_table_drupal_found) {
+								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name JOIN $data_table_name USING ($series_index_field) WHERE $drupal_user_id_field = ".pgtypeval_to_SQL($series_table_drupal_pg_field_type,$drupal_user_id)." GROUP BY $series_index_field ORDER BY $series_index_field";
+							} else {
+								$series_db_query_2 = "SELECT $series_db_query_fields FROM $series_table_name JOIN $data_table_name USING ($series_index_field) GROUP BY $series_index_field ORDER BY $series_index_field";
+							}
+						}
 						$series_pg_results_2 = pg_query($dbhandle, $series_db_query_2);
 						if ($series_pg_results_2) {
 							if ($debug) echo "Successfully ran series table query 2 = $series_db_query_2.<br>";
@@ -1012,8 +1109,6 @@ function pg_to_gviz_basic(
 				$datatable["cols"][$i+$series_num_records+1]["label"] = $category_table_extra_fields[$i];
 				$datatable["cols"][$i+$series_num_records+1]["type"] = pgtype_to_gvtype($category_table_extra_field_types[$i]);
 			}
-			
-			
 			/*
 			 * create the category hash
 			 * and load up column 0 with category values (indices or labels)
