@@ -749,6 +749,47 @@ function pg_to_gviz_basic(
 				$category_db_query .= " )";
 			}
 			/*
+			 * still working on the optional WHERE clause(s)
+			 *
+			 * next is when a list of series indices are defined
+			 *   i.e. a filter - do not include data rows where the series value is not in this list
+			 *   the series index field MUST be defined, so we can assume this is OK
+			 */
+			if (strlen(trim($series_index_selections))) {
+				if ($where) {
+					$data_db_query .= " AND (";
+					$data_db_query_where .= " AND (";
+					$series_db_query .= " AND (";
+					$category_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$data_db_query_where .= " WHERE (";
+					$series_db_query .= " WHERE (";
+					$category_db_query .= " WHERE (";
+					$where = 1;
+				}
+				$index_counter = 0;
+				$series_indices = array();
+				$series_indices = explode(",",$series_index_selections);
+				foreach ($series_indices as $series_index) {
+					if ($index_counter) {
+						$data_db_query .= " OR";
+						$data_db_query_where .= " OR";
+						$series_db_query .= " OR";
+						$category_db_query .= " OR";
+					}
+					$data_db_query .= " $series_index_field = ".pgtypeval_to_SQL($series_pg_field_type,$series_index);
+					$data_db_query_where .= " $data_table_name.$series_index_field = ".pgtypeval_to_SQL($series_pg_field_type,$series_index);
+					$series_db_query .= " $series_index_field = ".pgtypeval_to_SQL($series_pg_field_type,$series_index);
+					$category_db_query .= " $series_index_field = ".pgtypeval_to_SQL($series_pg_field_type,$series_index);
+					++$index_counter;
+				}
+				$data_db_query .= " )";
+				$data_db_query_where .= " )";
+				$series_db_query .= " )";
+				$category_db_query .= " )";
+			}
+			/*
 			* still working on the optional WHERE clause(s)
 			*
 			* next is when a list of "filter field" indices are defined
