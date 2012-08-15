@@ -997,7 +997,7 @@ function pg_to_gviz_basic(
 						$category_pg_field_type = $category_table_index_pg_field_type;
 						if ($category_table_label_found) {
 							$cat_fld = $category_label_field;
-							$category_db_query_fields .= ",max($category_label_field) as $category_label_field";
+							$category_db_query_fields .= ",max($category_table_name.$category_label_field) as $category_label_field";
 							$category_pg_field_type = $category_table_label_pg_field_type;
 						}
 						$datatable["cols"][0]["id"] = $cat_fld;
@@ -1094,7 +1094,7 @@ function pg_to_gviz_basic(
 						$series_db_query_fields = $series_index_field;
 						if ($series_table_label_found) {
 							$ser_fld = $series_label_field;
-							$series_db_query_fields .= ",max($series_label_field) as $series_label_field";
+							$series_db_query_fields .= ",max($series_table_name.$series_label_field) as $series_label_field";
 						}
 						for ($i=0;$i<$series_table_extra_field_count;++$i) {
 							$series_db_query_fields .= ",max(".$series_table_extra_fields[$i].") as ".$series_table_extra_fields[$i];
