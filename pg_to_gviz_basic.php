@@ -998,11 +998,11 @@ function pg_to_gviz_basic(
 						if ($category_table_label_found) {
 							$cat_fld = $category_label_field;
 							$category_db_query_fields .= ",max($category_table_name.$category_label_field) as $category_label_field";
-							$category_pg_field_type = $category_table_label_pg_field_type;
+							$category_pg_field_type = pgtype_to_gvtype($category_table_label_pg_field_type);
 						}
 						$datatable["cols"][0]["id"] = $cat_fld;
 						$datatable["cols"][0]["label"] = $cat_fld;
-						$datatable["cols"][0]["type"] = $category_pg_field_type;
+						$datatable["cols"][0]["type"] = pgtype_to_gvtype($category_pg_field_type);
 						for ($i=0;$i<$category_table_extra_field_count;++$i) {
 							$category_db_query_fields .= ",max(".$category_table_extra_fields[$i].") as ".$category_table_extra_fields[$i];
 						}
