@@ -203,7 +203,7 @@ function pg_to_gviz_basic(
 	*					D (3) - date
 	*					T (4) - timeofday
 	*					A (5) - datetime
-	*					S (6) - text
+	*					S (6) - string
 	*					Note that these are GOOGLE VIZ data types, NOT postgres data types NOR PHP data types!
 	*					The fact that our data has to pass from strongly typed pg fields, through the PHP-PG API into a
 	*					PHP query result data object and then into PHP arrays, and then into a variety of output types
@@ -406,7 +406,7 @@ function pg_to_gviz_basic(
 					case 'a': // A (5) - datetime
 						$field_types[$i] = 5;
 						break;
-					case 's': // S (6) - text
+					case 's': // S (6) - string
 						$field_types[$i] = 6;
 						break;
 					default: // O (0) - map from original pg field type to gv column type
@@ -529,8 +529,8 @@ function pg_to_gviz_basic(
 				case 5: // A (5) - datetime
 					$datatable["cols"][$series_counter]["type"] = "datetime";
 					break;
-				case 6: // S (6) - text
-					$datatable["cols"][$series_counter]["type"] = "text";
+				case 6: // S (6) - string
+					$datatable["cols"][$series_counter]["type"] = "string";
 					break;
 				case 0: // O (0) - mapping from pg field type to gv column type
 				default:
@@ -561,8 +561,8 @@ function pg_to_gviz_basic(
 					case 5: // A (5) - datetime
 						$datatable["cols"][$series_counter]["type"] = "datetime";
 						break;
-					case 6: // S (6) - text
-						$datatable["cols"][$series_counter]["type"] = "text";
+					case 6: // S (6) - string
+						$datatable["cols"][$series_counter]["type"] = "string";
 						break;
 					case 0: // O (0) - mapping from pg field type to gv column type
 					default:
@@ -1380,8 +1380,8 @@ function pg_to_gviz_basic(
 					case 5: // A (5) - datetime
 						$datatable["cols"][$series_counter]["type"] = "datetime";
 						break;
-					case 6: // S (6) - text
-						$datatable["cols"][$series_counter]["type"] = "text";
+					case 6: // S (6) - string
+						$datatable["cols"][$series_counter]["type"] = "string";
 						break;
 					case 0: // O (0) - mapping from pg field type to gv column type
 					default:
