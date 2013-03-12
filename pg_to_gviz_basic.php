@@ -14,6 +14,7 @@ $silent_debug_arg = "false"; // a string = "false" is the official default
 $output_format_arg = "json"; // a string = "json" is the official default so it always works with gviz
 $output_gv_type = "table"; // a string = "table" is the official default - no restrictions on column order or column types on tables
 $output_type = "generic"; // a string = "generic" is the official default
+$output_fieldtypes = ""; // an empty string = "" is the default, meaning to use the default pg to gviz mapping 
 $data_table_name = ""; // a string = "" is the official default
 $category_table_name = ""; // a string = "" is the official default
 $category_index_field = ""; // a string = "" is the official default
@@ -60,6 +61,7 @@ function pg_to_gviz_basic(
 			$output_format_arg,
 			$output_gv_type,
 			$output_type,
+			$output_fieldtypes,
 			$data_table_name,
 			$category_table_name,
 			$category_index_field,
@@ -177,6 +179,7 @@ function pg_to_gviz_basic(
 	/*
 	 * $output_type
 	* category1 - suitable for column, bar, line graphs - a category (text) axis and a value (number) axis
+	* 				will use the output_fieldtypes string if specified, or will use the default field mapping otherwise 
 	* 				this one is the simplest - source is a pg crosstab:
 	* 				a category key field, a category label field, and columns for every series
 	* 				but this one is the less useful, because crosstabs are difficult to create dynamically in postgresql,
@@ -188,13 +191,17 @@ function pg_to_gviz_basic(
 	* 				and a value column
 	* 				the code below converts this into a multi-column table - to make it suitable for gv json and etc.
 	* 				this one is more useful, because it can create as many series columns as are in the data,
-	* generic - this is actually a special case of any string passed into this arg that is not predefined
+	* generic (or ANY other string) - this is actually a special case of any string passed into this arg that is not predefined (currently "category1" or "category2")
 	* 				this type recreates an output table JUST LIKE the input table, so it is really a lot like category 1
 	* 				more like a crosstab source than the relational source
-	* 				the idea is that the string defines the gviz column types as follows (this is from an email I sent out)
+	* 				the idea is that the string defines the gviz column types as follows (this is from an email I sent out):
+	* 
+	* 					also, note that IF DEFINED, the output_fieldtypes string OVER-RIDES the output_type string
+	* 					so $output_type = "DNNN" and $output_fieldtypes = "" is equivalent to $output_type = "Generic" and $output_fieldtypes = "DNNN"
+	* 					and $output_type = "DNNN" and $output_fieldtypes = "" is equivalent to $output_type = "X57cd3Y" and $output_fieldtypes = "DNNN"
 	*
 	*					When it's just a table and not some specific data structure that is required for a particular google viz,
-	*					then you can create an "output_type" that is a sequence of characters that tell the MGK what type to declare
+	*					then you can create an "output_type" (or output_fieldtypes) that is a sequence of characters that tell the MGK what type to declare
 	*					the json columns.  So for example, "SNNS" would tell it to make the columns text, number, number, text.
 	*					The default will be text when not specified.
 	*					O (0) - map from original pg field type to gv column type
@@ -209,6 +216,8 @@ function pg_to_gviz_basic(
 	*					PHP query result data object and then into PHP arrays, and then into a variety of output types
 	*					(HTML text streams, CSV files, JSON text streams, etc.) is why this is a bit of a maze with lots of trap-doors.
 	*
+	* 					again, if the output_fieldtypes string is specified, will use the output_fieldtypes string to create the type mapping
+	* 						and will ignore the output_type name 
 	*/
 	$output_type = getargs ("output_type",$output_type);
 	if ($debug) echo "output_type: $output_type<br>";
@@ -240,6 +249,7 @@ function pg_to_gviz_basic(
 				$category_show_all = false;
 			}
 			$series_fields = getargs ("series_fields",$series_fields);
+			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$filter_index_field = getargs ("filter_index_field",$filter_index_field);
 			$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
 			if ($debug) {
@@ -250,6 +260,7 @@ function pg_to_gviz_basic(
 				echo "category_label_field: $category_label_field<br>";
 				echo "category_show_all_arg: $category_show_all_arg<br>";
 				echo "category_show_all: $category_show_all<br>";
+				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_fields*: $series_fields<br>";
 				echo "filter_index_field: $filter_index_field<br>";
 				echo "filter_index_selections: $filter_index_selections<br>";
@@ -270,12 +281,12 @@ function pg_to_gviz_basic(
 				exit;
 			}
 			/*
-			 * build the (OUTPUT) column type array with defaults
-			 * the defaults are O (0) = map from original pg field type to gv column type
+			 * for category 1, fill out the $output_fieldtypes string with defaults if not specified already
+			 * the default is O (0) = map from original pg field type to gv column type
 			 */
-			$field_types = array();
-			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
+			$output_fieldtypes = trim($output_fieldtypes); // get rid of spaces
+			for ($i=strlen($output_fieldtypes);$i<$max_num_fields;++$i) { // append as many "o"s as needed
+				$output_fieldtypes .= "o"; // O  - map from original pg field type to gv column type
 			}
 			break;
 		case 'category2':
@@ -290,6 +301,7 @@ function pg_to_gviz_basic(
 			} else {
 				$category_show_all = false;
 			}
+			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$series_table_name = getargs ("series_table_name",$series_table_name);
 			$series_index_field = getargs ("series_index_field",$series_index_field);
 			$series_index_selections = getargs ("series_index_selections",$series_index_selections);
@@ -311,6 +323,7 @@ function pg_to_gviz_basic(
 				echo "category_label_field: $category_label_field<br>";
 				echo "category_show_all_arg: $category_show_all_arg<br>";
 				echo "category_show_all: $category_show_all<br>";
+				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_index_field*: $series_index_field<br>";
 				echo "series_index_selections: $series_index_selections<br>";
 				echo "series_label_field: $series_label_field<br>";
@@ -342,24 +355,28 @@ function pg_to_gviz_basic(
 				exit;
 			}
 			/*
-			 * build the (OUTPUT) column type array with defaults
-			 * the defaults are O (0) = map from original pg field type to gv column type
+			 * for category 2, fill out the $output_fieldtypes string with defaults if not specified already
+			 * the default is O (0) = map from original pg field type to gv column type
+			 * 
+			 * note that all the series fields will be the same source type
 			 */
-			$field_types = array();
-			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
+			$output_fieldtypes = trim($output_fieldtypes); // get rid of spaces
+			for ($i=strlen($output_fieldtypes);$i<$max_num_fields;++$i) { // append as many "o"s as needed
+				$output_fieldtypes .= "o"; // O  - map from original pg field type to gv column type
 			}
 			break;
 		case 'generic':
 			// make them all maps from original pg field type to gv column types
-			$output_type = str_repeat('o',$max_num_fields);
+			$output_fieldtypes = str_repeat('o',$max_num_fields);
 		default:
 			$data_table_name = getargs ("data_table_name",$data_table_name);
 			$series_fields = getargs ("series_fields",$series_fields);
+			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$filter_index_field = getargs ("filter_index_field",$filter_index_field);
 			$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
 			if ($debug) {
 				echo "data_table_name*: $data_table_name<br>";
+				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_fields*: $series_fields<br>";
 				echo "filter_index_field: $filter_index_field<br>";
 				echo "filter_index_selections: $filter_index_selections<br>";
@@ -375,45 +392,28 @@ function pg_to_gviz_basic(
 				exit;
 			}
 			/*
-			 * build the (OUTPUT) column type array with defaults
-			 * the defaults are O (0) = map from original pg field type to gv column type
+			 * create the output field types array
+			 * if the output_fieldtypes string is not empty use it, otherwise use the output_type string
 			 */
-			$field_types = array();
-			for ($i=0;$i<$max_num_fields;++$i) {
-				$field_types[] = 0; // O (0) - map from original pg field type to gv column type
+			if (strlen(trim($output_fieldtypes))) {
+				// use the output_fieldtypes string as containing the field type mappings
+				$output_fieldtypes = trim($output_fieldtypes); // get rid of spaces
+			} else {
+				// use the output_type string as containing the field type mappings
+				$output_fieldtypes = trim($output_type); // get rid of spaces
 			}
-			/*
-			 * blow up any string that exists into a series of acceptable field types
-			 */
-			for ($i=0;$i<strlen(trim($output_type));++$i) {
-				$field_types[] = 0;
-				switch (strtolower($output_type[$i])) {
-					case 'o': // O (0) - map from original pg field type to gv column type
-						$field_types[$i] = 0;
-						break;
-					case 'n': // N (1) - number
-						$field_types[$i] = 1;
-						break;
-					case 'b': // B (2) - boolean (use this with care until we work out the bugs, boolean never stays boolean through transitions)
-						$field_types[$i] = 2;
-						break;
-					case 'd': // D (3) - date
-						$field_types[$i] = 3;
-						break;
-					case 't': // T (4) - timeofday
-						$field_types[$i] = 4;
-						break;
-					case 'a': // A (5) - datetime
-						$field_types[$i] = 5;
-						break;
-					case 's': // S (6) - string
-						$field_types[$i] = 6;
-						break;
-					default: // O (0) - map from original pg field type to gv column type
-						$field_types[$i] = 0;
-				}
+			// fill it out with defaults if needed
+			for ($i=strlen($output_fieldtypes);$i<$max_num_fields;++$i) { // append as many "o"s as needed
+				$output_fieldtypes .= "o"; // O  - map from original pg field type to gv column type
 			}
 	}
+	// and now convert the $output_fieldtypes string to an integer array
+	$field_types = array();
+	for ($i=0;$i<$max_num_fields;++$i) {
+		$field_types[] = gvcode_to_gvindex($output_fieldtypes[$i]);
+	}
+	// done! $field_types[] is now filled out with the appropriate integer codes
+	
 	// other args
 	$drupal_user_id_field = getargs ("drupal_user_id_field",$drupal_user_id_field);
 	$drupal_user_id = getargs ("drupal_user_id",$drupal_user_id);
@@ -423,6 +423,8 @@ function pg_to_gviz_basic(
 	$precision = getargs ("output_precision",$precision);
 	if ($debug) {
 		echo "output_type: $output_type<br>";
+		echo "drupal_user_id_field: $drupal_user_id_field<br>";
+		echo "drupal_user_id: $drupal_user_id<br>";
 		echo "category_axis_label: $category_axis_label<br>";
 		echo "series_axis_label: $series_axis_label<br>";
 		echo "conversion_factor: $conv_factor<br>";
@@ -442,9 +444,11 @@ function pg_to_gviz_basic(
 			// the field list string
 			if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
 				$data_db_query_fields = "$category_index_field, $category_label_field, ";
+				$category_field_count = 2;
 				$cat_lbl = $category_label_field;
 			} else {
 				$data_db_query_fields = "$category_index_field, ";
+				$category_field_count = 1;
 				$cat_lbl = $category_index_field;
 			}
 			// now tack on the the series fields
@@ -504,39 +508,41 @@ function pg_to_gviz_basic(
 			$data_pg_results = pg_query($dbhandle, $data_db_query);
 			$data_num_records = pg_num_rows($data_pg_results);
 			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
-			// create the gviz json array header records
-			// note that we use the gviz json array format regardless of the output type
-			//   this makes it easier for creating the gviz json, and the others are easy anyway
-			//
-			// use the field names for the labels
+			/*
+			 * create the gviz json array header records
+			 * 
+			 * note that we are using the gviz json array format regardless of the output type
+			 * this makes it easier when creating the gviz json, and the others are easy anyway
+			 * 
+			 * use the $cat_lbl determined above for the json array label field value
+			 * use "category" as the id field value
+			 */
 			$datatable = array();
 			$datatable["cols"][0]["id"] = "category";
 			$datatable["cols"][0]["label"] = $cat_lbl;
+			/*
+			 * determining the output gviz column types
+			 * 
+			 * determining the type field value traverses into the real messiness
+			 * of moving data between so many systems with different data typing conventions
+			 *
+			 * here is what we did:
+			 * the user can specify what type is intended for the destination (gviz tools)
+			 * absent that, the default is a mapping from the source (pg db) field type
+			 * to the target (gviz tools) field type
+			 */
+			// determine the type of the category output column
 			$series_counter = 0;
-			switch ($field_types[$series_counter]) {
-				case 1: // N (1) - number
-					$datatable["cols"][$series_counter]["type"] = "number";
-					break;
-				case 2: // B (2) - boolean
-					$datatable["cols"][$series_counter]["type"] = "boolean";
-					break;
-				case 3: // D (3) - date
-					$datatable["cols"][$series_counter]["type"] = "date";
-					break;
-				case 4: // T (4) - timeofday
-					$datatable["cols"][$series_counter]["type"] = "timeofday";
-					break;
-				case 5: // A (5) - datetime
-					$datatable["cols"][$series_counter]["type"] = "datetime";
-					break;
-				case 6: // S (6) - string
-					$datatable["cols"][$series_counter]["type"] = "string";
-					break;
-				case 0: // O (0) - mapping from pg field type to gv column type
-				default:
-					$pg_field_type = pg_field_type($data_pg_results,$series_counter);
-					$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
+			$gvtype = gvindex_to_gvtype($field_types[$series_counter]);
+			if (strlen($gvtype)) {
+				// if the fn returns a nonempty string, it's a defined output type, use it
+			} else {
+				// do the default mapping from pg field type to gv column type
+				// note that is is the type of the value used in the gviz column 0 - so it could be index or the optional label if defined
+				$gvtype = pgtype_to_gvtype(pg_field_type($data_pg_results,$category_field_count-1));
 			}
+			$datatable["cols"][$series_counter]["type"] = $gvtype;
+			// determine the types of the series columns
 			$series_fields_array = array();
 			$series_fields_array = explode(",",$series_fields);
 			if ($debug) echo "exploded series:<br>";
@@ -545,56 +551,62 @@ function pg_to_gviz_basic(
 			foreach ($series_fields_array as $series) {
 				$datatable["cols"][$series_counter]["id"] = "series".($series_counter);
 				$datatable["cols"][$series_counter]["label"] = $series;
-				switch ($field_types[$series_counter]) {
-					case 1: // N (1) - number
-						$datatable["cols"][$series_counter]["type"] = "number";
-						break;
-					case 2: // B (2) - boolean
-						$datatable["cols"][$series_counter]["type"] = "boolean";
-						break;
-					case 3: // D (3) - date
-						$datatable["cols"][$series_counter]["type"] = "date";
-						break;
-					case 4: // T (4) - timeofday
-						$datatable["cols"][$series_counter]["type"] = "timeofday";
-						break;
-					case 5: // A (5) - datetime
-						$datatable["cols"][$series_counter]["type"] = "datetime";
-						break;
-					case 6: // S (6) - string
-						$datatable["cols"][$series_counter]["type"] = "string";
-						break;
-					case 0: // O (0) - mapping from pg field type to gv column type
-					default:
-						$pg_field_type = pg_field_type($data_pg_results,$series_counter);
-						$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
+				$gvtype = gvindex_to_gvtype($field_types[$series_counter]);
+				if (strlen($gvtype)) {
+					// if the fn returns a nonempty string, it's a defined output type, use it
+				} else {
+					// do the default mapping from pg field type to gv column type
+					// note that is is the type of the value used in the gviz column 0 - so it could be index or the optional label if defined
+					$gvtype = pgtype_to_gvtype(pg_field_type($data_pg_results,$series_counter+$category_field_count-1));
 				}
+				$datatable["cols"][$series_counter]["type"] = $gvtype;
 				++$series_counter;
 			}
+			// DONE! the gviz output column types have been defined 
 			$table_column_count = $series_counter - 1;
 			if ($debug) echo "created gviz json array for $table_column_count series<br>";
-			// load the gviz json array with data
-			//
-			// figure out whether to use the data "as is" or create records for "every" category
-			// assumes the category index and category label fields are the same in both the data and category tables
-			// if a category table was given and if the show all flag is set to true,
-			// then create a table with all the combinations, regardless of whether there is data
+			/*
+			 * load the gviz json array with data
+			 * 
+			 * note that as of March 2013, the category 1 JSON output format is designed
+			 * ONLY to be a Google Data Visualization data source. Specifically this means
+			 * that if a field type is "date", the field value (a date string) will be changed
+			 * to an embedded javascript command, New Date(xxx).  As of March, 2013 this is still
+			 * necessary to get date values passed correctly into the Google Data Visualization tools.
+			 * 
+			 * figure out whether to use the data "as is" or create records for "every" category
+			 * 
+			 * IMPORTANT - the category index and category label fields MUST BE the same in both
+			 * the data and category tables
+			 */
 			if (strlen(trim($category_table_name)) && $category_show_all) {
-				// the field list string
+			   /* 
+			    * if a category table was given and if the show all flag is set to true,
+			    * then create a table with a record for every category value,
+			    * regardless of whether there are data in any of the series corresponding to the values
+			    */
+				// create the category table field list string
 				if (strlen(trim($category_label_field))) { // category label field supplied.  Yea, user!
 					$category_db_query_fields = "$category_index_field, $category_label_field ";
 				} else {
 					$category_db_query_fields = "$category_index_field ";
 				}
-				// the basic query
+				// create the basic query selecting category values from the category table
 				$category_db_query = "SELECT $category_db_query_fields FROM $category_table_name";
 				if ($debug) echo "category_db_query: $category_db_query<br>";
 				// now try the query!
 				$category_pg_results = pg_query($dbhandle, $category_db_query);
 				$category_num_records = pg_num_rows($category_pg_results);
 				if ($debug) echo "category_db_query resulted in $category_num_records records.<br>";
-				// create the empty data array and
-				// additionally create a hash table so I EFFICIENTLY know where to put the data later
+				/*
+				 * create the data array with category field values but intialized elsewhere (series values)
+				 * with a default value (null in this case)
+				 * 
+				 * use the fn that tweaks field values so things work smoothly when the JSON output is used
+				 * as a data source for google data visualization tools
+				 * 
+				 * also, create a hash table to make it efficient to calculate the correct row for series data
+				 */ 
 				$default_value = null;
 				$category_hash = array();
 				$category_row_count = 0;
@@ -1364,32 +1376,29 @@ function pg_to_gviz_basic(
 			foreach ($series_fields_array as $series) {
 				$datatable["cols"][$series_counter]["id"] = "field".($series_counter);
 				$datatable["cols"][$series_counter]["label"] = $series;
-				switch ($field_types[$series_counter]) {
-					case 1: // N (1) - number
-						$datatable["cols"][$series_counter]["type"] = "number";
-						break;
-					case 2: // B (2) - boolean
-						$datatable["cols"][$series_counter]["type"] = "boolean";
-						break;
-					case 3: // D (3) - date
-						$datatable["cols"][$series_counter]["type"] = "date";
-						break;
-					case 4: // T (4) - timeofday
-						$datatable["cols"][$series_counter]["type"] = "timeofday";
-						break;
-					case 5: // A (5) - datetime
-						$datatable["cols"][$series_counter]["type"] = "datetime";
-						break;
-					case 6: // S (6) - string
-						$datatable["cols"][$series_counter]["type"] = "string";
-						break;
-					case 0: // O (0) - mapping from pg field type to gv column type
-					default:
-						$pg_field_type = pg_field_type($data_pg_results,$series_counter);
-						$datatable["cols"][$series_counter]["type"] = pgtype_to_gvtype($pg_field_type);
+				/*
+				 * determining the output gviz column types
+				 *
+				 * determining the type field value traverses into the real messiness
+				 * of moving data between so many systems with different data typing conventions
+				 *
+				 * here is what we did:
+				 * the user can specify what type is intended for the destination (gviz tools)
+				 * absent that, the default is a mapping from the source (pg db) field type
+				 * to the target (gviz tools) field type
+				 */
+				$gvtype = gvindex_to_gvtype($field_types[$series_counter]);
+				if (strlen($gvtype)) {
+					// if the fn returns a nonempty string, it's a defined output type, use it
+				} else {
+					// do the default mapping from pg field type to gv column type
+					// note that is is the type of the value used in the gviz column 0 - so it could be index or the optional label if defined
+					$gvtype = pgtype_to_gvtype(pg_field_type($data_pg_results,$series_counter));
 				}
+				$datatable["cols"][$series_counter]["type"] = $gvtype;
 				++$series_counter;
 			}
+			// DONE! the gviz output column types have been defined
 			$table_column_count = $series_counter - 1; // note this is different! because there is no category column in this case
 			if ($debug) echo "created gviz json array for $series_counter fields<br>";
 			// load the gviz json array with data

@@ -22,6 +22,7 @@ $silent_debug_arg = "false"; // a string = "false" is the official default
 $output_format_arg = "json"; // a string = "json" is the official default so it always works with gviz
 $output_gv_type = "table"; // a string = "table" is the official default - no restrictions on column order or column types on tables
 $output_type = "generic"; // a string = "generic" is the official default
+$output_fieldtypes = ""; // an empty string = "" is the default, meaning to use the default pg to gviz mapping
 $data_table_name = ""; // a string = "" is the official default
 $category_table_name = ""; // a string = "" is the official default
 $category_index_field = ""; // a string = "" is the official default
@@ -61,6 +62,7 @@ $result = pg_to_gviz_basic (
 		$output_format_arg,
 		$output_gv_type,
 		$output_type,
+		$output_fieldtypes,
 		$data_table_name,
 		$category_table_name,
 		$category_index_field,
