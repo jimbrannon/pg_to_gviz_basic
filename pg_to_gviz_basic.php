@@ -611,7 +611,30 @@ function pg_to_gviz_basic(
 				$category_hash = array();
 				$category_row_count = 0;
 				while ($category_row = pg_fetch_object($category_pg_results)) {
-					$datatable["rows"][$category_row_count]["c"][0]["v"] = $category_row->$cat_lbl;
+					/*
+					 * the category value
+					 * have to apply some rules to the value based on the type
+					 */
+					$val = null;
+					switch ($output_format) {
+						case 'json':
+							switch ($output_gv_type) {
+								case 'table':
+								case 'line_graph':
+								case 'column_graph':
+								case 'annotated_time_line':
+								case 'filter':
+								default:
+									$val = gvtypeval_to_gvval($datatable["cols"][0]["type"],$category_row->$cat_lbl);
+							}
+							break;
+						case 'csv':
+						case 'html_table_2d':
+						case 'html_table_raw':
+						default:
+							$val = $category_row->$cat_lbl;
+					}
+					$datatable["rows"][$category_row_count]["c"][0]["v"] = $val;
 					$category_hash[$category_row->$category_index_field] = $category_row_count;
 					$category_series_counter = 0;
 					foreach ($series_fields_array as $series) {
@@ -628,7 +651,37 @@ function pg_to_gviz_basic(
 					$data_series_counter = 0;
 					foreach ($series_fields_array as $series) {
 						$table_row = $category_hash[$data_row->$category_index_field];
-						$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
+						/*
+					 	 * the series values
+					 	 * have to apply some rules to the value based on the type
+					 	 */
+						$val = null;
+						switch ($output_format) {
+							case 'json':
+								switch ($output_gv_type) {
+									case 'table':
+									case 'line_graph':
+									case 'column_graph':
+									case 'annotated_time_line':
+									case 'filter':
+									default:
+										$val = gvtypeval_to_gvval($datatable["cols"][$data_series_counter+1]["type"],$data_row->$series);
+								}
+								break;
+							case 'csv':
+							case 'html_table_2d':
+							case 'html_table_raw':
+							default:
+								$val = $data_row->$series;
+						}
+						// note that we are using target column type, and not source field type - should change this later
+						switch (strtolower($datatable["cols"][$data_series_counter+1]["type"])) {
+							case 'number': // only apply the $conv_factor if it is a number column 
+								$val = $val * $conv_factor;
+								break;
+							default:
+						}
+						$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
 					}
 					++$data_row_count;
@@ -638,10 +691,63 @@ function pg_to_gviz_basic(
 			} else {
 				$data_row_count = 0;
 				while ($data_row = pg_fetch_object($data_pg_results)) {
-					$datatable["rows"][$data_row_count]["c"][0]["v"] = $data_row->$cat_lbl;
+					/*
+					 * the category value
+					 * have to apply some rules to the value based on the type
+					 */
+					$val = null;
+					switch ($output_format) {
+						case 'json':
+							switch ($output_gv_type) {
+								case 'table':
+								case 'line_graph':
+								case 'column_graph':
+								case 'annotated_time_line':
+								case 'filter':
+								default:
+									$val = gvtypeval_to_gvval($datatable["cols"][0]["type"],$data_row->$cat_lbl);
+							}
+							break;
+						case 'csv':
+						case 'html_table_2d':
+						case 'html_table_raw':
+						default:
+							$val = $data_row->$cat_lbl;
+					}
+					$datatable["rows"][$data_row_count]["c"][0]["v"] = $val;
+					/*
+					 * the series values
+					 * have to apply some rules to the value based on the type
+					 */
 					$data_series_counter = 0;
 					foreach ($series_fields_array as $series) {
-						$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $data_row->$series * $conv_factor;
+						$val = null;
+						switch ($output_format) {
+							case 'json':
+								switch ($output_gv_type) {
+									case 'table':
+									case 'line_graph':
+									case 'column_graph':
+									case 'annotated_time_line':
+									case 'filter':
+									default:
+										$val = gvtypeval_to_gvval($datatable["cols"][$data_series_counter+1]["type"],$data_row->$series);
+								}
+								break;
+							case 'csv':
+							case 'html_table_2d':
+							case 'html_table_raw':
+							default:
+								$val = $data_row->$series;
+						}
+						// note that we are using target column type, and not source field type - should change this later
+						switch (strtolower($datatable["cols"][$data_series_counter+1]["type"])) {
+							case 'number': // only apply the $conv_factor if it is a number column
+								$val = $val * $conv_factor;
+								break;
+							default:
+						}
+						$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
 					}
 					++$data_row_count;
