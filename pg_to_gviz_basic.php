@@ -674,12 +674,9 @@ function pg_to_gviz_basic(
 							default:
 								$val = $data_row->$series;
 						}
-						// note that we are using target column type, and not source field type - should change this later
-						switch (strtolower($datatable["cols"][$data_series_counter+1]["type"])) {
-							case 'number': // only apply the $conv_factor if it is a number column 
-								$val = $val * $conv_factor;
-								break;
-							default:
+						// apply the conversion factor to series if they are numbers
+						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+							$val = $val * $conv_factor;
 						}
 						$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
@@ -740,12 +737,9 @@ function pg_to_gviz_basic(
 							default:
 								$val = $data_row->$series;
 						}
-						// note that we are using target column type, and not source field type - should change this later
-						switch (strtolower($datatable["cols"][$data_series_counter+1]["type"])) {
-							case 'number': // only apply the $conv_factor if it is a number column
-								$val = $val * $conv_factor;
-								break;
-							default:
+						// apply the conversion factor to series if they are numbers
+						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+							$val = $val * $conv_factor;
 						}
 						$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
@@ -1512,7 +1506,37 @@ function pg_to_gviz_basic(
 			while ($data_row = pg_fetch_object($data_pg_results)) {
 				$data_series_counter = 0;
 				foreach ($series_fields_array as $series) {
-					$datatable["rows"][$data_row_count]["c"][$data_series_counter]["v"] = $data_row->$series;
+					/*
+					 * the series values
+					* have to apply some rules to the value based on the type
+					*/
+					$val = null;
+					switch ($output_format) {
+						case 'json':
+							switch ($output_gv_type) {
+								case 'table':
+								case 'line_graph':
+								case 'column_graph':
+								case 'annotated_time_line':
+								case 'filter':
+								default:
+									$val = gvtypeval_to_gvval($datatable["cols"][$data_series_counter]["type"],$data_row->$series);
+							}
+							break;
+						case 'csv':
+						case 'html_table_2d':
+						case 'html_table_raw':
+						default:
+							$val = $data_row->$series;
+					}
+					// apply the conversion factor to series if they are numbers
+					// but not to the first column  [this is kinda hokey - makes too many assumptions about the source table]
+					if ($data_series_counter) {
+						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+							$val = $val * $conv_factor;
+						}
+					}
+					$datatable["rows"][$data_row_count]["c"][$data_series_counter]["v"] = $val;
 					if ($debug) echo $data_row->$series."<br>";
 					++$data_series_counter;
 				}
