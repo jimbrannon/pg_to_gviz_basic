@@ -987,6 +987,10 @@ function pg_to_gviz_basic(
 					$data_db_query_where .= " $data_table_name.$drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 					$series_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
 					$category_db_query .= " $drupal_user_id_field = ".pgtypeval_to_SQL($drupal_pg_field_type,$drupal_user_id);
+					$data_db_query .= " )";
+					$data_db_query_where .= " )";
+					$series_db_query .= " )";
+					$category_db_query .= " )";
 				} else {
 					echo "Warning: Data table drupal user id field query failed.<br>";
 					echo "Warning: query = $drupal_db_query<br>";
