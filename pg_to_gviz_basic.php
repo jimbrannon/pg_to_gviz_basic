@@ -82,7 +82,10 @@ function pg_to_gviz_basic(
 			$category_axis_label,
 			$series_axis_label,
 			$conv_factor,
-			$precision
+			$precision,
+			$category_date_arg,
+			$category_min,
+			$category_max
 	) {
 	// get the debug arg first
 	$debug_arg = getargs ("debug",$debug_arg);
@@ -248,6 +251,15 @@ function pg_to_gviz_basic(
 			} else {
 				$category_show_all = false;
 			}
+			$category_date_arg = getargs ("category_date",$category_date_arg);
+			if (strlen(trim($category_date_arg))) {
+				$category_date = strtobool($category_date_arg);
+			} else {
+				$category_date = false;
+			}
+			//note that these should be strings that WILL work in the query with no modification (other than maybe quoting, as in dates)
+			$category_min = getargs ("category_min",$category_min);
+			$category_max = getargs ("category_max",$category_max);
 			$series_fields = getargs ("series_fields",$series_fields);
 			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$filter_index_field = getargs ("filter_index_field",$filter_index_field);
@@ -260,6 +272,8 @@ function pg_to_gviz_basic(
 				echo "category_label_field: $category_label_field<br>";
 				echo "category_show_all_arg: $category_show_all_arg<br>";
 				echo "category_show_all: $category_show_all<br>";
+				echo "category_min: $category_min<br>";
+				echo "category_max: $category_max<br>";
 				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_fields*: $series_fields<br>";
 				echo "filter_index_field: $filter_index_field<br>";
@@ -301,6 +315,15 @@ function pg_to_gviz_basic(
 			} else {
 				$category_show_all = false;
 			}
+			$category_date_arg = getargs ("category_date",$category_date_arg);
+			if (strlen(trim($category_date_arg))) {
+				$category_date = strtobool($category_date_arg);
+			} else {
+				$category_date = false;
+			}
+			//note that these should be strings that WILL work in the query with no modification (other than maybe quoting, as in dates)
+			$category_min = getargs ("category_min",$category_min);
+			$category_max = getargs ("category_max",$category_max);
 			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$series_table_name = getargs ("series_table_name",$series_table_name);
 			$series_index_field = getargs ("series_index_field",$series_index_field);
@@ -323,6 +346,8 @@ function pg_to_gviz_basic(
 				echo "category_label_field: $category_label_field<br>";
 				echo "category_show_all_arg: $category_show_all_arg<br>";
 				echo "category_show_all: $category_show_all<br>";
+				echo "category_min: $category_min<br>";
+				echo "category_max: $category_max<br>";
 				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_index_field*: $series_index_field<br>";
 				echo "series_index_selections: $series_index_selections<br>";
@@ -500,6 +525,32 @@ function pg_to_gviz_basic(
 					$where = 1;
 				}
 				$data_db_query .= " $drupal_user_id_field = $drupal_user_id )";
+			}
+			if (strlen(trim($category_min))) { // we have a category index minimum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				if ($category_date) {
+					$data_db_query .= " $category_index_field >= '$category_min' )";
+				} else {
+					$data_db_query .= " $category_index_field >= $category_min )";
+				}
+			}
+			if (strlen(trim($category_max))) { // we have a category index maximum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				if ($category_date) {
+					$data_db_query .= " $category_index_field <= '$category_max' )";
+				} else {
+					$data_db_query .= " $category_index_field <= $category_max )";
+				}
 			}
 			// finally the ORDER BY clause.  the categories will be ordered here by index.  the series are ordered as named in the list in the arg
 			$data_db_query .= " ORDER BY $category_index_field";
@@ -997,6 +1048,39 @@ function pg_to_gviz_basic(
 					echo "Warning: not using drupal user id field.<br>";
 				}
 			}
+			/*
+			* STILL working on the optional WHERE clause(s)
+			*
+			* next is when a category index minimum is defined
+			*/
+			if (strlen(trim($category_min))) { // we have a category index minimum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				if ($category_date) {
+					$data_db_query .= " $category_index_field >= '$category_min' )";
+				} else {
+					$data_db_query .= " $category_index_field >= $category_min )";
+				}
+			}
+			if (strlen(trim($category_max))) { // we have a category index maximum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				if ($category_date) {
+					$data_db_query .= " $category_index_field <= '$category_max' )";
+				} else {
+					$data_db_query .= " $category_index_field <= $category_max )";
+				}
+			}
+				
+			
 			/*
 			 * finally the ORDER BY and GROUP BY clauses
 			 *
