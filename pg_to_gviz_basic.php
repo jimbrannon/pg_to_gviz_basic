@@ -39,7 +39,8 @@ $precision = 99; // an integer = 99 is the official default
  */
 
 /*
- * this is a wrapper around the big DMI code base.
+ * DO NOT MODIFY THIS CODE
+ * instead use the wrapper
  * it's purpose is to separate the arg defaults from the rest of the code.
  * the defaults are the only parts of the code that project engineers want to mess with,
  * and since often they do not want to or can not pass args via the URL arg structure

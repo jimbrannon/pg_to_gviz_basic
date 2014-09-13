@@ -29,6 +29,8 @@ $category_index_field = ""; // a string = "" is the official default
 $category_index_selections = ""; // a string = "" is the official default
 $category_label_field = ""; // a string = "" is the official default
 $category_show_all_arg = "false"; // a string = "false" is the official default
+$category_min = ""; // a string = "" is the official default
+$category_max = ""; // a string = "" is the official default
 $series_table_name = ""; // a string = "" is the official default
 $series_fields = ""; // a string = "" is the official default -  comma delimited, NO SPACES!!
 $series_index_field = ""; // a string = "" is the official default
@@ -83,7 +85,9 @@ $result = pg_to_gviz_basic (
 		$category_axis_label,
 		$series_axis_label,
 		$conv_factor,
-		$precision
+		$precision,
+		$category_min,
+		$category_max
 	);
 if ($result) {
 	// handle a return value interpreted as true
