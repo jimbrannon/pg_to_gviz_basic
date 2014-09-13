@@ -513,7 +513,7 @@ function pg_to_gviz_basic(
 					if ($index_counter) {
 						$data_db_query .= " OR";
 					}
-					$category_index = pgtypeval_to_SQL ($category_index_field_type, $category_index)
+					$category_index = pgtypeval_to_SQL ($category_index_field_type, $category_index);
 					$data_db_query .= " $category_index_field = $category_index";
 					++$index_counter;
 				}
@@ -554,7 +554,7 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min);
 				$data_db_query .= " $category_index_field >= $category_min )";
 			}
 			if (strlen(trim($category_max))) { // we have a category index maximum to handle
@@ -564,7 +564,7 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max);
 				$data_db_query .= " $category_index_field <= $category_max )";
 			}
 			// finally the ORDER BY clause.  the categories will be ordered here by index.  the series are ordered as named in the list in the arg
@@ -1081,7 +1081,7 @@ function pg_to_gviz_basic(
 					$category_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min);
 				$data_db_query .= " $category_index_field >= $category_min )";
 				$data_db_query_where .= " $category_index_field >= $category_min )";
 				$series_db_query .= " $category_index_field >= $category_min )";
@@ -1100,7 +1100,7 @@ function pg_to_gviz_basic(
 					$category_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max);
 				$data_db_query .= " $category_index_field <= $category_max )";
 				$data_db_query_where .= " $category_index_field <= $category_max )";
 				$series_db_query .= " $category_index_field <= $category_max )";
@@ -1613,7 +1613,7 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min);
 				$data_db_query .= " $category_index_field >= $category_min )";
 			}
 			if (strlen(trim($category_max))) { // we have a category index maximum to handle
@@ -1623,7 +1623,7 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max);
 				$data_db_query .= " $category_index_field <= $category_max )";
 			}
 			if ($debug) echo "db_query: $data_db_query<br>";
