@@ -83,7 +83,6 @@ function pg_to_gviz_basic(
 			$series_axis_label,
 			$conv_factor,
 			$precision,
-			$category_date_arg,
 			$category_min,
 			$category_max
 	) {
@@ -251,13 +250,6 @@ function pg_to_gviz_basic(
 			} else {
 				$category_show_all = false;
 			}
-			$category_date_arg = getargs ("category_date",$category_date_arg);
-			if (strlen(trim($category_date_arg))) {
-				$category_date = strtobool($category_date_arg);
-			} else {
-				$category_date = false;
-			}
-			//note that these should be strings that WILL work in the query with no modification (other than maybe quoting, as in dates)
 			$category_min = getargs ("category_min",$category_min);
 			$category_max = getargs ("category_max",$category_max);
 			$series_fields = getargs ("series_fields",$series_fields);
@@ -315,13 +307,6 @@ function pg_to_gviz_basic(
 			} else {
 				$category_show_all = false;
 			}
-			$category_date_arg = getargs ("category_date",$category_date_arg);
-			if (strlen(trim($category_date_arg))) {
-				$category_date = strtobool($category_date_arg);
-			} else {
-				$category_date = false;
-			}
-			//note that these should be strings that WILL work in the query with no modification (other than maybe quoting, as in dates)
 			$category_min = getargs ("category_min",$category_min);
 			$category_max = getargs ("category_max",$category_max);
 			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
@@ -399,12 +384,16 @@ function pg_to_gviz_basic(
 			$output_fieldtypes = getargs ("output_fieldtypes",$output_fieldtypes);
 			$filter_index_field = getargs ("filter_index_field",$filter_index_field);
 			$filter_index_selections = getargs ("filter_index_selections",$filter_index_selections);
+			$category_min = getargs ("category_min",$category_min);
+			$category_max = getargs ("category_max",$category_max);
 			if ($debug) {
 				echo "data_table_name*: $data_table_name<br>";
 				echo "output_fieldtypes: $output_fieldtypes<br>";
 				echo "series_fields*: $series_fields<br>";
 				echo "filter_index_field: $filter_index_field<br>";
 				echo "filter_index_selections: $filter_index_selections<br>";
+				echo "category_min: $category_min<br>";
+				echo "category_max: $category_max<br>";
 			}
 			if (!strlen(trim($data_table_name))) {
 				echo "Error: Missing table_name arg.  table_name is required for a category1 output.<br>";
@@ -481,6 +470,36 @@ function pg_to_gviz_basic(
 			$data_db_query_fields .= $series_fields;
 			// the basic query
 			$data_db_query = "SELECT $data_db_query_fields FROM $data_table_name";
+			/*
+			 * have to figure out field types in order to create where clauses - stupid pg delimiters
+			*/
+			$data_pg_results = pg_query($dbhandle, $data_db_query." LIMIT 1");
+			if ($data_pg_results) {
+				if ($debug) echo "Successfully ran data table test query = $data_db_query LIMIT 1.<br>";
+			} else {
+				echo "Error: Data table test query failed.<br>";
+				echo "Error: query = $data_db_query LIMIT 1.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+				exit;
+			}
+			/*
+			* figure out the pg field types in the data table and convert to gviz column types...
+			* note that category column could change if a label field is supplied in an external category table
+			*
+			*  the following is the pg field type of the field BEING USED AS THE CATEGORY OUTPUT VALUES
+			*  it might not be the index field if a lable field is deinfed
+			*/
+			$category_pg_field_type = pg_field_type($data_pg_results,0);
+			/*
+			* the following is the field type of the category index field,
+			* regardless of what field is used to create the category values in the JSON table
+			*
+			* FYI - this is ALWAYS the field used as the hash table index
+			*/
+			$category_index_field_type = $category_pg_field_type;
+			if ($debug) echo "data table category pg field currently is type $category_pg_field_type.<br>";
+			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
+			if ($debug) echo "gviz category column currently set to type $category_gviz_column_type.<br>";
 			$where = 0;
 			// now the optional WHERE clause(s) if necessary
 			if (strlen(trim($category_index_selections))) { // we have a list of category indices to handle
@@ -493,6 +512,7 @@ function pg_to_gviz_basic(
 					if ($index_counter) {
 						$data_db_query .= " OR";
 					}
+					$category_index = pgtypeval_to_SQL ($category_index_field_type, $category_index)
 					$data_db_query .= " $category_index_field = $category_index";
 					++$index_counter;
 				}
@@ -533,11 +553,8 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				if ($category_date) {
-					$data_db_query .= " $category_index_field >= '$category_min' )";
-				} else {
-					$data_db_query .= " $category_index_field >= $category_min )";
-				}
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$data_db_query .= " $category_index_field >= $category_min )";
 			}
 			if (strlen(trim($category_max))) { // we have a category index maximum to handle
 				if ($where) {
@@ -546,11 +563,8 @@ function pg_to_gviz_basic(
 					$data_db_query .= " WHERE (";
 					$where = 1;
 				}
-				if ($category_date) {
-					$data_db_query .= " $category_index_field <= '$category_max' )";
-				} else {
-					$data_db_query .= " $category_index_field <= $category_max )";
-				}
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$data_db_query .= " $category_index_field <= $category_max )";
 			}
 			// finally the ORDER BY clause.  the categories will be ordered here by index.  the series are ordered as named in the list in the arg
 			$data_db_query .= " ORDER BY $category_index_field";
@@ -1056,31 +1070,41 @@ function pg_to_gviz_basic(
 			if (strlen(trim($category_min))) { // we have a category index minimum to handle
 				if ($where) {
 					$data_db_query .= " AND (";
+					$data_db_query_where .= " AND (";
+					$series_db_query .= " AND (";
+					$category_db_query .= " AND (";
 				} else {
 					$data_db_query .= " WHERE (";
+					$data_db_query_where .= " WHERE (";
+					$series_db_query .= " WHERE (";
+					$category_db_query .= " WHERE (";
 					$where = 1;
 				}
-				if ($category_date) {
-					$data_db_query .= " $category_index_field >= '$category_min' )";
-				} else {
-					$data_db_query .= " $category_index_field >= $category_min )";
-				}
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$data_db_query .= " $category_index_field >= $category_min )";
+				$data_db_query_where .= " $category_index_field >= $category_min )";
+				$series_db_query .= " $category_index_field >= $category_min )";
+				$category_db_query .= " $category_index_field >= $category_min )";
 			}
 			if (strlen(trim($category_max))) { // we have a category index maximum to handle
 				if ($where) {
 					$data_db_query .= " AND (";
+					$data_db_query_where .= " AND (";
+					$series_db_query .= " AND (";
+					$category_db_query .= " AND (";
 				} else {
 					$data_db_query .= " WHERE (";
+					$data_db_query_where .= " WHERE (";
+					$series_db_query .= " WHERE (";
+					$category_db_query .= " WHERE (";
 					$where = 1;
 				}
-				if ($category_date) {
-					$data_db_query .= " $category_index_field <= '$category_max' )";
-				} else {
-					$data_db_query .= " $category_index_field <= $category_max )";
-				}
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$data_db_query .= " $category_index_field <= $category_max )";
+				$data_db_query_where .= " $category_index_field <= $category_max )";
+				$series_db_query .= " $category_index_field <= $category_max )";
+				$category_db_query .= " $category_index_field <= $category_max )";
 			}
-				
-			
 			/*
 			 * finally the ORDER BY and GROUP BY clauses
 			 *
@@ -1515,10 +1539,46 @@ function pg_to_gviz_basic(
 			 *
 			 * the field list string - no categories or series here, "the war is over, we are all just folk now" (folk = fields)
 			 * if the delimiter in the url ever changes from not being a comma, then we'll have to explode and parse the series fields
+			 * 
+			 * added an exception to the "we re all just folk now", min/max, just assume the category index is the very first field
 			 */
 			$data_db_query_fields = $series_fields;
+			$series_fields_array = array();
+			$series_fields_array = explode(",",$series_fields);
+			$category_index_field = $series_fields_array[0];
 			// the basic query
 			$data_db_query = "SELECT $data_db_query_fields FROM $data_table_name";
+			/*
+			 * have to figure out field types in order to create where clauses - stupid pg delimiters
+			*/
+			$data_pg_results = pg_query($dbhandle, $data_db_query." LIMIT 1");
+			if ($data_pg_results) {
+				if ($debug) echo "Successfully ran data table test query = $data_db_query LIMIT 1.<br>";
+			} else {
+				echo "Error: Data table test query failed.<br>";
+				echo "Error: query = $data_db_query LIMIT 1.<br>";
+				echo "Error: Exiting pg_to_gviz_basic DMI.<br>";
+						exit;
+			}
+			
+			/*
+			* figure out the pg field types in the data table and convert to gviz column types...
+			* note that category column could change if a label field is supplied in an external category table
+			*
+			*  the following is the pg field type of the field BEING USED AS THE CATEGORY OUTPUT VALUES
+			*  it might not be the index field if a lable field is deinfed
+			*/
+			$category_pg_field_type = pg_field_type($data_pg_results,0);
+			/*
+			* the following is the field type of the category index field,
+			* regardless of what field is used to create the category values in the JSON table
+			*
+			* FYI - this is ALWAYS the field used as the hash table index
+			*/
+			$category_index_field_type = $category_pg_field_type;
+			if ($debug) echo "data table category pg field currently is type $category_pg_field_type.<br>";
+			$category_gviz_column_type = pgtype_to_gvtype($category_pg_field_type);
+			if ($debug) echo "gviz category column currently set to type $category_gviz_column_type.<br>";
 			$where = 0;
 			// now the optional WHERE clause(s) if necessary
 			if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
@@ -1544,6 +1604,26 @@ function pg_to_gviz_basic(
 					$where = 1;
 				}
 				$data_db_query .= " $drupal_user_id_field = $drupal_user_id )";
+			}
+			if (strlen(trim($category_min))) { // we have a category index minimum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				$category_min = pgtypeval_to_SQL ($category_index_field_type, $category_min)
+				$data_db_query .= " $category_index_field >= $category_min )";
+			}
+			if (strlen(trim($category_max))) { // we have a category index maximum to handle
+				if ($where) {
+					$data_db_query .= " AND (";
+				} else {
+					$data_db_query .= " WHERE (";
+					$where = 1;
+				}
+				$category_max = pgtypeval_to_SQL ($category_index_field_type, $category_max)
+				$data_db_query .= " $category_index_field <= $category_max )";
 			}
 			if ($debug) echo "db_query: $data_db_query<br>";
 			// now try the query!
