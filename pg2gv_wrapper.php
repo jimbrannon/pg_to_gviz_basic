@@ -158,7 +158,7 @@ if (strlen(trim($category_range_number))) {
 		$category_min = $minval->format('Y-m-d');
 	}
 } elseif (strlen(trim($category_range_datetime))) {
-	$rangeval = $category_range_date + 0; // number of seconds
+	$rangeval = $category_range_datetime + 0; // number of seconds
 	if (strlen(trim($category_min))) {
 		if (strlen(trim($category_max))) {
 			// both defined, do nothing
