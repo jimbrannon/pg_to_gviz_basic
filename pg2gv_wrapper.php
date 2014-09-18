@@ -145,13 +145,12 @@ if (strlen(trim($category_range))) {
 	} elseif (strlen(trim($category_max))) {
 		// max defined, calculate min
 		// convert to value, adjust, convert to string
-		// try this without casting it, see if it works...
 		$maxval = DateTime::createFromFormat('Y-m-d', $category_max);
 		$periodval = $category_period + 0;
 		$minval = $maxval->modify("-$periodval day");
 		$category_min = $minval->format('Y-m-d');
 	} else {
-		// neither defined
+		// neither defined, calculate min and max
 		$maxval = new DateTime();
 		$category_max = $maxval->format('Y-m-d');
 		$periodval = $category_period + 0;
