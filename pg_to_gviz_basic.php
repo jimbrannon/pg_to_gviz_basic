@@ -675,8 +675,10 @@ function pg_to_gviz_basic(
 								$val = $data_row->$series;
 						}
 						// apply the conversion factor to series if they are numbers
-						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
-							$val = $val * $conv_factor;
+						if ($val <> null) {
+							if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+								$val = $val * $conv_factor;
+							}
 						}
 						$datatable["rows"][$table_row]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
@@ -738,8 +740,10 @@ function pg_to_gviz_basic(
 								$val = $data_row->$series;
 						}
 						// apply the conversion factor to series if they are numbers
-						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
-							$val = $val * $conv_factor;
+						if ($val <> null) {
+							if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+								$val = $val * $conv_factor;
+							}
 						}
 						$datatable["rows"][$data_row_count]["c"][$data_series_counter+1]["v"] = $val;
 						++$data_series_counter;
@@ -1400,13 +1404,15 @@ function pg_to_gviz_basic(
 								$val = $series_value_value;
 									
 						}
-						switch ($data_pg_field_type) {
-							case 'numeric': // a "numeric" real number field from a pg database
-							case 'float4': // a single precision real number field from a pg database
-							case 'float8': // a double precision real number field from a pg database
-								$val = $val * $conv_factor;
-								break;
-							default:
+						if ($val <> null) {
+							switch ($data_pg_field_type) {
+								case 'numeric': // a "numeric" real number field from a pg database
+								case 'float4': // a single precision real number field from a pg database
+								case 'float8': // a double precision real number field from a pg database
+									$val = $val * $conv_factor;
+									break;
+								default:
+							}
 						}
 						$datatable["rows"][$category_hash_value]["c"][$series_hash_value+1]["v"] = $val;
 						++$data_row_count;
@@ -1514,7 +1520,10 @@ function pg_to_gviz_basic(
 					 * the series values
 					* have to apply some rules to the value based on the type
 					*/
+					if ($debug) echo "field type = ".$datatable["cols"][$data_series_counter]["type"]."<br>";
+					if ($debug) echo "raw data value = ".$data_row->$series."<br>";
 					$val = null;
+					if ($debug) echo "val init null = $val<br>";
 					switch ($output_format) {
 						case 'json':
 							switch ($output_gv_type) {
@@ -1525,6 +1534,7 @@ function pg_to_gviz_basic(
 								case 'filter':
 								default:
 									$val = gvtypeval_to_gvval($datatable["cols"][$data_series_counter]["type"],$data_row->$series);
+									if ($debug) echo "val set json = $val<br>";
 							}
 							break;
 						case 'csv':
@@ -1532,14 +1542,18 @@ function pg_to_gviz_basic(
 						case 'html_table_raw':
 						default:
 							$val = $data_row->$series;
+							if ($debug) echo "val set other = $val<br>";
 					}
 					// apply the conversion factor to series if they are numbers
 					// but not to the first column  [this is kinda hokey - makes too many assumptions about the source table]
 					if ($data_series_counter) {
-						if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
-							$val = $val * $conv_factor;
+						if ($val <> null) {
+							if (pgtype_isnumber(pg_field_type($data_pg_results,$data_series_counter))) {
+								$val = $val * $conv_factor;
+							}
 						}
 					}
+					if ($debug) echo "val set converted = $val<br>";
 					$datatable["rows"][$data_row_count]["c"][$data_series_counter]["v"] = $val;
 					if ($debug) echo $data_row->$series."<br>";
 					++$data_series_counter;
