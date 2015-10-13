@@ -1394,7 +1394,11 @@ function pg_to_gviz_basic(
 									case 'annotated_time_line':
 									case 'filter':
 									default:
-										$val = pgtypeval_to_gvval($data_pg_field_type,$series_value_value);
+										if ($series_value_value <> null) {
+											$val = pgtypeval_to_gvval($data_pg_field_type,$series_value_value);
+										} else {
+											$val = $series_value_value;
+										}
 								}
 								break;
 							case 'csv':
