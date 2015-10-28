@@ -473,25 +473,57 @@ function pg_to_gviz_basic(
 				}
 				$data_db_query .= " )";
 			}
-			if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
-				if ($where) {
-					$data_db_query .= " AND (";
-				} else {
-					$data_db_query .= " WHERE (";
-					$where = 1;
-				}
-				$index_counter = 0;
-				$filter_indices = array();
-				$filter_indices = explode(",",$filter_index_selections);
-				foreach ($filter_indices as $filter_index) {
-					if ($index_counter) {
-						$data_db_query .= " OR";
+			if (strlen(trim($filter_index_field))) { // we have one or more filter fields defined
+				$filter_index_field = trim($filter_index_field);
+				$filter_fields = array();
+				$filter_fields = explode(",",$filter_index_field);
+				if(count($filter_fields)=1) {
+					if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
+						if ($where) {
+							$data_db_query .= " AND (";
+						} else {
+							$data_db_query .= " WHERE (";
+							$where = 1;
+						}
+						$index_counter = 0;
+						$filter_indices = array();
+						$filter_indices = explode(",",$filter_index_selections);
+						foreach ($filter_indices as $filter_index) {
+							if ($index_counter) {
+								$data_db_query .= " OR";
+							}
+							$data_db_query .= " $filter_index_field = $filter_index";
+							++$index_counter;
+						}
+						$data_db_query .= " )";
 					}
-					$data_db_query .= " $filter_index_field = $filter_index";
-					++$index_counter;
+				} else {
+					if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
+						if ($where) {
+							$data_db_query .= " AND (";
+						} else {
+							$data_db_query .= " WHERE (";
+							$where = 1;
+						}
+						$field_index_counter = 0;
+						$value_index_counter = 0;
+						$filter_indices = array();
+						$filter_indices = explode(",",$filter_index_selections);
+						$value_index_counter = count($filter_indices);
+						foreach ($filter_fields as $filter_field) {
+							if ($field_index_counter) {
+								$data_db_query .= " AND";
+							}
+							if ($field_index_counter<$value_index_counter) {
+								$filter_index = $filter_indices[$field_index_counter];
+							}
+							$data_db_query .= " $filter_field = $filter_index";
+							++$field_index_counter;
+						}
+						$data_db_query .= " )";
+					}
 				}
-				$data_db_query .= " )";
-			}
+			)
 			if (strlen(trim($drupal_user_id_field)) && strlen(trim($drupal_user_id))) { // we have a drupal_user id to handle
 				if ($where) {
 					$data_db_query .= " AND (";
@@ -1394,7 +1426,11 @@ function pg_to_gviz_basic(
 									case 'annotated_time_line':
 									case 'filter':
 									default:
-										$val = pgtypeval_to_gvval($data_pg_field_type,$series_value_value);
+										if ($series_value_value <> null) {
+											$val = pgtypeval_to_gvval($data_pg_field_type,$series_value_value);
+										} else {
+											$val = $series_value_value;
+										}
 								}
 								break;
 							case 'csv':
