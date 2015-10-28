@@ -477,7 +477,7 @@ function pg_to_gviz_basic(
 				$filter_index_field = trim($filter_index_field);
 				$filter_fields = array();
 				$filter_fields = explode(",",$filter_index_field);
-				if(count($filter_fields)=1) {
+				if(count($filter_fields)==1) {
 					if (strlen(trim($filter_index_selections))) { // we have a list of filter indices to handle
 						if ($where) {
 							$data_db_query .= " AND (";
