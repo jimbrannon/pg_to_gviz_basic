@@ -523,7 +523,7 @@ function pg_to_gviz_basic(
 						$data_db_query .= " )";
 					}
 				}
-			)
+			}
 			if (strlen(trim($drupal_user_id_field)) && strlen(trim($drupal_user_id))) { // we have a drupal_user id to handle
 				if ($where) {
 					$data_db_query .= " AND (";
