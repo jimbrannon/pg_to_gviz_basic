@@ -1678,23 +1678,24 @@ function pg_to_gviz_basic(
 		case 'json_simple': //return a json data stream tailored for a gviz object
 			//   first the json data table
 			$json_data_table = json_encode($datatable);
-			//   some stuff that seemed necessary to make the json readaable by the gviz libraries
+			//   some stuff that seemed necessary to make the json readable by the gviz libraries
 			$json_data_table = preg_replace('/\"new/','new',$json_data_table);
 			$json_data_table = preg_replace('/\)\"/',')',$json_data_table);
-			$json_data_table = preg_replace('/\"v\":/','v:',$json_data_table);
-			$json_data_table = preg_replace('/\"c\":/','c:',$json_data_table);
-			$json_data_table = preg_replace('/\"cols\":/','cols:',$json_data_table);
-			$json_data_table = preg_replace('/\"rows\":/','rows:',$json_data_table);
-			$json_data_table = preg_replace('/{\"id\":/','{id:',$json_data_table);
-			$json_data_table = preg_replace('/,\"label\":/',',label:',$json_data_table);
-			$json_data_table = preg_replace('/,\"type\":/',',type:',$json_data_table);
+			// for the simple json, this actually made it unreadable for the gviz system
+			//$json_data_table = preg_replace('/\"v\":/','v:',$json_data_table);
+			//$json_data_table = preg_replace('/\"c\":/','c:',$json_data_table);
+			//$json_data_table = preg_replace('/\"cols\":/','cols:',$json_data_table);
+			//$json_data_table = preg_replace('/\"rows\":/','rows:',$json_data_table);
+			//$json_data_table = preg_replace('/{\"id\":/','{id:',$json_data_table);
+			//$json_data_table = preg_replace('/,\"label\":/',',label:',$json_data_table);
+			//$json_data_table = preg_replace('/,\"type\":/',',type:',$json_data_table);
 			// and echo the results
 			//echo $tqx['responseHandler']."({version:'".$tqx['version']."',reqId:'".$tqx['reqId']."',status:'ok',table:$json_data_table});";
 			echo $json_data_table;
 			//echo $tqx['responseHandler']."({\"version\":\"".$tqx['version']."\",\"reqId\":\"".$tqx['reqId']."\",\"status\":\"ok\",\"table\":$json_data_table});";
 			//write this to a temp file for debugging
 			if ($silent_debug) {
-				fwrite($silent_debug_handle,$tqx['responseHandler']."({version:'".$tqx['version']."',reqId:'".$tqx['reqId']."',status:'ok',table:$json_data_table});");
+				fwrite($silent_debug_handle,$json_data_table);
 			}
 			break;
 		case 'html_table_2d': // output a simple html table, rows and columns, i.e. 2 dimensional
