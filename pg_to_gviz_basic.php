@@ -1679,8 +1679,8 @@ function pg_to_gviz_basic(
 			//   first the json data table
 			$json_data_table = json_encode($datatable);
 			//   some stuff that seemed necessary to make the json readable by the gviz libraries
-			$json_data_table = preg_replace('/\"new/','new',$json_data_table);
-			$json_data_table = preg_replace('/\)\"/',')',$json_data_table);
+			//$json_data_table = preg_replace('/\"new/','new',$json_data_table);
+			//$json_data_table = preg_replace('/\)\"/',')',$json_data_table);
 			// for the simple json, this actually made it unreadable for the gviz system
 			//$json_data_table = preg_replace('/\"v\":/','v:',$json_data_table);
 			//$json_data_table = preg_replace('/\"c\":/','c:',$json_data_table);
