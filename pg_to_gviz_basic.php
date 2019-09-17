@@ -375,6 +375,18 @@ function pg_to_gviz_basic(
 		case 'generic':
 			// make them all maps from original pg field type to gv column types
 			$output_fieldtypes = str_repeat('o',$max_num_fields);
+		case 'deleteandinsertquery':
+			/* a new output type that is actually an input type for a query filter table - single row with a single value
+			 * run a delete query to delete the existing record and then insert a new record with a new value
+			 * returns a table containing the query result (not actual data)
+			 * easy peasy, but have to "allocate" some of the args for other purposes:
+			 *   $output_type = 'deleteandinsertquery'
+			 *   $data_table_name is the name of the table to be modified
+			 *   use $drupal_user_id_field and $drupal_user_id args to hold the field name and value for the new record
+			*/
+			$data_table_name = getargs ("data_table_name",$data_table_name);
+			$drupal_user_id_field = getargs ("drupal_user_id_field",$drupal_user_id_field);
+			$drupal_user_id = getargs ("drupal_user_id",$drupal_user_id);
 		default:
 			$data_table_name = getargs ("data_table_name",$data_table_name);
 			$series_fields = getargs ("series_fields",$series_fields);
@@ -1473,6 +1485,25 @@ function pg_to_gviz_basic(
 			}
 			if ($debug) echo "loaded gviz json array with $data_row_count records of data<br>";
 			break;
+		case 'deleteandinsertquery':
+			//remove the existing record
+			$data_db_query = "DELETE FROM $data_table_name";
+			if ($debug) echo "db_query: $data_db_query<br>";
+			$data_pg_results = pg_query($dbhandle, $data_db_query);
+			$data_num_records = pg_num_rows($data_pg_results);
+			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
+			// add the new record
+			$data_db_query = "INSERT INTO $data_table_name";
+			$data_db_query .= "(";
+			$data_db_query .= $drupal_user_id_field;
+			$data_db_query .= ") VALUES (";
+			$data_db_query .= $drupal_user_id;
+			$data_db_query .= ");";
+			if ($debug) echo "db_query: $data_db_query<br>";
+			$data_pg_results = pg_query($dbhandle, $data_db_query);
+			$data_num_records = pg_num_rows($data_pg_results);
+			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
+			$datatable = array();
 		default:
 			/*
 			 * assume it is a string of types, and they are already defined in the type array
