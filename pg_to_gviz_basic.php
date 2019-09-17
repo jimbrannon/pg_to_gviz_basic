@@ -387,6 +387,7 @@ function pg_to_gviz_basic(
 			$data_table_name = getargs ("data_table_name",$data_table_name);
 			$drupal_user_id_field = getargs ("drupal_user_id_field",$drupal_user_id_field);
 			$drupal_user_id = getargs ("drupal_user_id",$drupal_user_id);
+			break;
 		default:
 			$data_table_name = getargs ("data_table_name",$data_table_name);
 			$series_fields = getargs ("series_fields",$series_fields);
@@ -1504,6 +1505,7 @@ function pg_to_gviz_basic(
 			$data_num_records = pg_num_rows($data_pg_results);
 			if ($debug) echo "data_db_query resulted in $data_num_records records.<br>";
 			$datatable = array();
+			break;
 		default:
 			/*
 			 * assume it is a string of types, and they are already defined in the type array
